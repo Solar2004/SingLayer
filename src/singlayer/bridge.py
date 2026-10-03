@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import signal
+import time
 from contextlib import suppress
 from urllib.parse import urlsplit
 
@@ -105,10 +106,33 @@ class Bridge:
         for ws in list(self.connections.values()):
             await ws.close(code=1001, message=b"SingLayer stopping")
 
+    async def status(self, request):
+        if request.headers.get("Origin") or request.host not in {"127.0.0.1:8975", "localhost:8975"}:
+            raise web.HTTPForbidden()
+        player = self.store.active()
+        return web.json_response(
+            {
+                "service": "singlayer",
+                "browsers": len(self.connections),
+                "track": None
+                if player is None
+                else {
+                    "title": player.data.get("title", ""),
+                    "artist": player.data.get("artist", ""),
+                    "position": player.position(time.monotonic()),
+                    "duration": player.data.get("duration", 0),
+                    "playing": player.data.get("state") == 0,
+                    "stale": time.monotonic() - player.position_observed > 15,
+                },
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
     def app(self):
         app = web.Application()
         app.router.add_get("/", self.websocket)
         app.router.add_get("/health", self.health)
+        app.router.add_get("/status", self.status)
         app.on_shutdown.append(self.shutdown)
         return app
 

@@ -43,3 +43,14 @@ resultados automáticamente con el karaoke. No se instala nada en el navegador n
 se activa la captura de sonido sin intervención del usuario.
 
 Créditos y licencias: [THIRD_PARTY.md](THIRD_PARTY.md).
+# Panel de control (nuevo)
+
+Ejecuta `.venv/bin/singlayer app` para abrir una ventana nativa con conexión,
+canción, reloj y resultado de la búsqueda de letras. Pulsa «Conectar y abrir
+letras». El overlay se inicia cuando el conector recibe una canción. Cerrar
+esta ventana detiene solo los procesos que ella inició.
+
+Si tenías `singlayer start` abierto, ciérralo antes con Ctrl+C: esa versión no
+expone el nuevo estado. La ventana no puede leer los resultados de un overlay
+iniciado por separado. Un resultado de letras no demuestra sincronía de un remix.
+SongRec automático y corrección de velocidad siguen pendientes.

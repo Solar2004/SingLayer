@@ -7,4 +7,4 @@ __pycache__/
 *.log
 .env
 dist/
-
+SingLayer.desktop

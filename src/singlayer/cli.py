@@ -58,13 +58,18 @@ def main():
     parser = argparse.ArgumentParser(description="SingLayer: browser music → native karaoke")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("start", help="Run bridge and upstream overlay together")
+    sub.add_parser("app", help="Open the SingLayer control panel")
     bridge = sub.add_parser("bridge", help="Run just the WebNowPlaying → MPRIS bridge")
     bridge.add_argument("--port", type=int, default=8975)
     sub.add_parser("overlay", help="Run the upstream Kotonoha overlay")
     sub.add_parser("recognize", help="Open SongRec without starting audio capture")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    if args.action == "bridge":
+    if args.action == "app":
+        from .dashboard import run
+
+        raise SystemExit(run())
+    elif args.action == "bridge":
         asyncio.run(serve(args.port))
     elif args.action == "overlay":
         raise SystemExit(launch_overlay().wait())

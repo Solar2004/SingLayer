@@ -1,0 +1,12 @@
+[submodule "upstream/kotonoha"]
+	path = upstream/kotonoha
+	url = https://github.com/locez/kotonoha.git
+[submodule "upstream/webnowplaying"]
+	path = upstream/webnowplaying
+	url = https://github.com/keifufu/WebNowPlaying.git
+[submodule "upstream/songrec"]
+	path = upstream/songrec
+	url = https://github.com/marin-m/SongRec.git
+[submodule "upstream/synclyrics"]
+	path = upstream/synclyrics
+	url = https://github.com/AnshulJ999/SyncLyrics.git

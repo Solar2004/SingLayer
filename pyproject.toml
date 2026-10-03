@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "singlayer"
+version = "0.1.0"
+description = "Connect browser music to an existing Linux karaoke overlay"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = ["aiohttp>=3.12,<4", "dbus-fast>=2.44,<5", "qasync>=0.28,<1"]
+
+[project.scripts]
+singlayer = "singlayer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# dbus-fast uses D-Bus signatures, not Python names, in these annotations.
+"src/singlayer/mpris.py" = ["F722", "F821"]

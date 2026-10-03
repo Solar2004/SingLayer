@@ -10,5 +10,7 @@ uv venv --system-site-packages --python "$SINGLAYER_PYTHON" .venv
 uv pip install --python .venv/bin/python -r requirements.lock
 uv pip install --python .venv/bin/python --no-deps -e .
 uv pip install --python .venv/bin/python --no-deps ./upstream/kotonoha
-echo 'Ready. Add a WebNowPlaying custom adapter on port 8975, then run .venv/bin/singlayer start'
-
+if [[ "${1:-}" == "--engines" ]]; then
+  uv pip install --python .venv/bin/python -r requirements-engines.txt
+fi
+echo 'Ready. Add a WebNowPlaying custom adapter on port 8975, then run .venv/bin/singlayer app'

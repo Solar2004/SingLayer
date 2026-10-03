@@ -1,6 +1,7 @@
 """Local WebNowPlaying WebSocket adapter with an MPRIS output."""
 
 import asyncio
+import hashlib
 import logging
 import signal
 import time
@@ -27,6 +28,19 @@ class Bridge:
         self.pending: dict[tuple[int, int], asyncio.Future] = {}
         self.connection_id = 0
         self.command_id = 0
+        self.covers = {}
+        self.browser_families = {}
+
+    def receive_cover(self, connection, data):
+        if not 12 < len(data) <= 1_500_000:
+            return
+        body = data[4:]
+        if not (body.startswith(b"\x89PNG\r\n\x1a\n") or body.startswith(b"\xff\xd8\xff")):
+            return
+        key = connection, str(int.from_bytes(data[:4], "little"))
+        if len(self.covers) >= 16 and key not in self.covers:
+            self.covers.pop(next(iter(self.covers)))
+        self.covers[key] = (hashlib.sha256(body).hexdigest()[:20], body)
 
     async def command(self, kind, value, capability):
         player = self.store.active()
@@ -62,10 +76,17 @@ class Bridge:
         self.connection_id += 1
         connection = self.connection_id
         self.connections[connection] = ws
+        ua = request.headers.get("User-Agent", "")
+        self.browser_families[connection] = (
+            "Firefox" if "Firefox/" in ua else "Edge" if "Edg/" in ua else "Chromium"
+        )
         await ws.send_str(HANDSHAKE)
         LOG.info("Browser adapter connected (%s)", connection)
         try:
             async for message in ws:
+                if message.type == WSMsgType.BINARY:
+                    self.receive_cover(connection, message.data)
+                    continue
                 if message.type != WSMsgType.TEXT:
                     continue  # Artwork binary frames aren't needed by the lyrics engine.
                 before = self.media.Position
@@ -89,6 +110,8 @@ class Bridge:
                 )
         finally:
             self.connections.pop(connection, None)
+            self.browser_families.pop(connection, None)
+            self.covers = {key: value for key, value in self.covers.items() if key[0] != connection}
             self.store.remove_connection(connection)
             for (owner, _), future in self.pending.items():
                 if owner == connection and not future.done():
@@ -107,17 +130,22 @@ class Bridge:
             await ws.close(code=1001, message=b"SingLayer stopping")
 
     async def status(self, request):
-        if request.headers.get("Origin") or request.host not in {"127.0.0.1:8975", "localhost:8975"}:
-            raise web.HTTPForbidden()
+        self.local_request(request)
         player = self.store.active()
+        cover = self.covers.get((player.connection, player.browser_id)) if player else None
         return web.json_response(
             {
                 "service": "singlayer",
                 "browsers": len(self.connections),
+                "browser_families": list(self.browser_families.values()),
+                "api_version": 2,
                 "track": None
                 if player is None
                 else {
                     "title": player.data.get("title", ""),
+                    "id": player.track_id,
+                    "source": player.data.get("name", ""),
+                    "cover": cover[0] if cover and player.data.get("cover") else None,
                     "artist": player.data.get("artist", ""),
                     "position": player.position(time.monotonic()),
                     "duration": player.data.get("duration", 0),
@@ -128,11 +156,30 @@ class Bridge:
             headers={"Cache-Control": "no-store"},
         )
 
+    @staticmethod
+    def local_request(request):
+        if request.headers.get("Origin") or request.host not in {"127.0.0.1:8975", "localhost:8975"}:
+            raise web.HTTPForbidden()
+
+    async def cover(self, request):
+        self.local_request(request)
+        player = self.store.active()
+        cover = self.covers.get((player.connection, player.browser_id)) if player else None
+        if not cover or request.query.get("rev") != cover[0]:
+            raise web.HTTPNotFound()
+        body = cover[1]
+        return web.Response(
+            body=body,
+            content_type="image/png" if body.startswith(b"\x89PNG") else "image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+
     def app(self):
         app = web.Application()
         app.router.add_get("/", self.websocket)
         app.router.add_get("/health", self.health)
         app.router.add_get("/status", self.status)
+        app.router.add_get("/cover", self.cover)
         app.on_shutdown.append(self.shutdown)
         return app
 

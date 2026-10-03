@@ -10,6 +10,9 @@ requires-python = ">=3.11"
 license = "MIT"
 dependencies = ["aiohttp>=3.12,<4", "dbus-fast>=2.44,<5", "qasync>=0.28,<1"]
 
+[project.optional-dependencies]
+engines = ["syncedlyrics==1.0.1", "shazamio==0.8.1", "numpy>=2,<3"]
+
 [project.scripts]
 singlayer = "singlayer.cli:main"
 

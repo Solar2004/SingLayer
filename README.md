@@ -1,5 +1,37 @@
 # SingLayer
 
+## Native panel update
+
+Run **`.venv/bin/singlayer app`** for the current monochrome panel with cover art,
+real audio FFT, per-provider status, manual search and lyric timing controls.
+Close old panel/bridge/overlay instances before upgrading. The original `start`
+command below remains a legacy MPRIS-only mode.
+
+The new panel reuses Kotonoha's providers and canonical overlay adapter. It queries
+LRCLIB/NetEase/KuGou concurrently, then tries syncedlyrics' Musixmatch/Megalobiz.
+Optional SongRec or ShazamIO recognition overlaps when **system audio is enabled**:
+at most three sequential 12-second samples, at most four operations concurrently.
+Pending work is cancelled on a result or track change. Genius is a labelled
+plain-text fallback, never assigned invented timestamps. Session result caching,
+manual title/artist correction, line selection, offset and speed are implemented.
+
+Install extra engines with `bash scripts/setup.sh --engines` or the panel's
+**Instalar motores** button. Requires network access; direct versions are in
+`requirements-engines.txt` (transitive dependencies not locked yet). FFmpeg and
+`parec` must be installed separately for speaker-monitor audio. Capture is off by
+default, includes all audio on the default output, and never selects a microphone.
+Recognition sends fingerprints to Shazam. No audio is retained.
+
+**Validation limitation:** new orchestration, UI and adapter tests pass offline;
+live Shazam/provider coverage, actual desktop FFT and the new Wayland panel blur
+are not verified. PyPI/D-Bus/audio access was blocked in the development session.
+The old status table below describes the initial prototype, not the new panel.
+See [Spanish usage and current limitations](README.es.md).
+
+![Current native panel, idle](docs/dashboard-preview.png)
+
+## Initial prototype
+
 Browser music → synchronized desktop lyrics, by connecting existing projects.
 
 **Early integration prototype for Linux/KDE.** SoundCloud, Spotify Web and YouTube
@@ -147,4 +179,3 @@ redistributing content. No accounts, credentials or cached lyrics are in this re
 
 SingLayer's original code is MIT. This project is not affiliated with the upstream
 projects, SoundCloud, Spotify, YouTube or Shazam.
-

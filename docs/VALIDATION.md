@@ -1,5 +1,25 @@
 # Validation — initial prototype
 
+## Native panel / recognition integration update
+
+- 31 local tests pass: new workflow/panel/worker/status tests and non-network
+  bridge tests. Three socket/D-Bus-dependent tests excluded in this restricted run.
+- Tests prove four-way concurrency, cancellation of losing work and changed
+  tracks, query deduplication, three-sample bounds, missing-engine handling,
+  plain-text fallback, subprocess timeouts/output caps and temporary-file cleanup.
+- Actual Kotonoha parser, protocol decoder, ownership coordinator and receiver
+  accept the panel's generated lyric document. Fixtures use original demo text.
+- FFT silence/tone tests prove signal-dependent bars. UI was rendered offscreen
+  and visually inspected. This is not proof of desktop audio capture.
+- The `.desktop` launcher validates. Ruff checks pass.
+- SongRec isn't installed locally. Installing ShazamIO and syncedlyrics from
+  PyPI failed on DNS/network restrictions. End-to-end recognition, provider
+  matches, new panel compositor blur and live cover reception remain unverified.
+- Dependencies have an in-app installer, but that installer still needs a real
+  online run. Do not present the full live integration as finished/verified.
+
+## Earlier prototype checks
+
 Performed on 2026-10-03, Linux x86_64 / KDE, system Qt 6.11.2 and Python 3.14.7.
 
 - Pinned Kotonoha native bridge built successfully against system Qt / LayerShellQt.

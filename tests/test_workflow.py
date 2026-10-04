@@ -38,12 +38,15 @@ async def test_native_and_audio_overlap_and_losers_are_cancelled():
             await asyncio.wait_for(barrier.wait(), 1)
             if key == "lrclib":
                 return {"document": {"source": "lrclib"}}
+            if key == "recognize":
+                return {"title": TRACK["title"], "artist": TRACK["artist"], "recording_id": "actual"}
             await asyncio.Event().wait()
         finally:
             cancelled.add(key)
 
     result = await resolve(TRACK, invoke, lambda event: None, audio_allowed=True)
     assert result["document"]["source"] == "lrclib"
+    assert result["evidence"]["matches"] == 2
     assert entered == {"lrclib", "netease", "kugou", "recognize"}
     assert cancelled == entered
 

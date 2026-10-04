@@ -373,3 +373,23 @@ def test_changing_engine_clears_acoustic_results_and_persists_choice(panel, monk
     assert panel.observed_document is None
     assert not panel.live_cache and not panel.clock_anchors
     assert panel.automatic_clock is None
+
+
+
+def test_automatic_remix_uses_whisper_transcript_without_catalog_replacement(panel):
+    panel.lyric_source = "auto"
+    panel.track = {**TRACK, "title": "Demo Remix"}
+    panel.document = document(parse_lrc("[00:01]Original catalog words"), "test", "Demo", "Singer")
+    panel.engine_preference = "crisper"
+    raw = {"source": "whisper-vulkan", "lines": [
+        {"text": "Words actually sung in remix", "start": 10, "end": 14, "words": [], "translation": ""}]}
+    panel.observed_document = raw
+    panel.offset.blockSignals(True)
+    panel.offset.setValue(9)
+    panel.offset.blockSignals(False)
+    panel.publish()
+    assert panel.lyric_policy() == {"route": "transcript", "engine": "whisper"}
+    assert panel._source_document is raw
+    assert panel._adjusted_document["lines"][0]["start"] == 10
+    assert panel.lyric_preview.text() == "Words actually sung in remix"
+    assert panel.link.document["lines"][0]["text"] == "Words actually sung in remix"

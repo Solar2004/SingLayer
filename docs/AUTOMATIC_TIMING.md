@@ -84,7 +84,7 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 148 pruebas completas, Ruff, shell y diff check pasan.
+- 160 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
@@ -109,7 +109,7 @@ La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográf
 y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
 no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
 
-Regresiones específicas y puerta completa:148 pruebas, Ruff y diff check pasan.
+Regresiones específicas y puerta completa:160 pruebas, Ruff y diff check pasan.
 
 ## Contexto de estribillos y cambios de sección
 
@@ -126,7 +126,7 @@ tramos medidos. Detección posterior al reconocimiento, no anticipación del cor
 
 Pruebas de regresión: repetición con/sin contexto, contexto roto por corte,
 invalidez del reloj anterior y reconstrucción con referencias nuevas. Puerta
-completa:148 pruebas. No se ha medido esta mejora contra anotaciones humanas de
+completa:160 pruebas. No se ha medido esta mejora contra anotaciones humanas de
 una nueva matriz de remixes reales.
 
 ## Corrección de letra que desaparecía al finalizar
@@ -139,7 +139,7 @@ con su limitación de retraso. Mantener el catálogo no demuestra que sus tiempo
 sean correctos: la comprobación acústica continúa.
 
 Regresión de UI: búsqueda terminada, fragmento atrasado, conservación de letra
-actual/completa, seek hacia tramo medido y regreso al catálogo.148 pruebas pasan.
+actual/completa, seek hacia tramo medido y regreso al catálogo.160 pruebas pasan.
 
 ## Elección de letra y motor
 
@@ -156,7 +156,7 @@ falla con mensaje, no cambia silenciosamente a CPU. Crisper CPU está instalado
 pero sus resultados de canto pueden ser peores; no se presenta como GPU.
 
 Regresiones: texto acústico directo con catálogo disponible, cambio a catálogo,
-persistencia de elección y limpieza al cambiar motor.148 pruebas completas pasan.
+persistencia de elección y limpieza al cambiar motor.160 pruebas completas pasan.
 
 ## Catálogo candidato e instrumental
 
@@ -176,4 +176,34 @@ No se garantiza detectar todas las alucinaciones con texto plausible.
 Se evaluó Silero VAD6.2.0 a umbrales0.5 y0.1: descartó también canto japonés real.
 NO se activó esa dependencia en producción ni se filtró todo canto como silencio.
 El modelo y herramienta experimental permanecen locales; el instalador no los
-requiere. Evidencia de regresión y puerta completa:148 pruebas, Ruff/diff OK.
+requiere. Evidencia de regresión y puerta completa:160 pruebas, Ruff/diff OK.
+
+## Flujo de autoridad de la letra
+
+1. Identidad: metadatos aportan candidatos; durante reproducción se espera la
+   corroboración acústica de Shazam. Dos muestras concordantes confirman su
+   identificación, no el texto ni los tiempos. Una sola queda incierta.
+2. Versión de velocidad constante, incluido sped up/slowed: comparar frases
+   acústicas únicas con catálogo, estimar velocidad/desfase con tres referencias
+   coherentes y mostrar el reloj estimado. Los cortes invalidan y reconstruyen.
+3. Remix/mashup/bootleg/medley/loop/cut/snippet/excerpt/best part: en Automático
+   seleccionar Whisper Vulkan y mostrar directamente su transcripción/tiempos.
+   No se sustituye el texto por el catálogo ni se aplican sus ajustes manuales.
+4. Sin palabras fiables: no presentar el catálogo candidato como voz observada;
+   conservarlo en la lista para revisión. Los motores aún pueden alucinar texto.
+
+La clasificación inicial usa etiquetas del título; un remix no etiquetado no
+puede darse por detectado de antemano. «Solo transcripción» permite indicarlo
+manualmente. Los modos explícitos catálogo/transcripción y selección de motor
+siguen disponibles. En Automático, la ruta remix exige Whisper instalado y no
+lo cambia silenciosamente por Crisper. Al cambiar de ruta se selecciona el
+servicio propio correspondiente y se separan cachés por motor/ruta.
+
+Regresiones: límites de palabras (Cutting Crew/Sloop no son cuts/loops), speed
+up sigue alineación, títulos remix eligen Whisper, texto remix no heredado del
+catálogo, sin ajustes de reloj original, elecciones explícitas preservadas y
+Shazam corroborado antes de devolver una letra confirmada.160 pruebas pasan.
+
+Este flujo ordena evidencias; no garantiza toda música perfecta ni texto futuro
+antes de capturar voz. Un remix usa audio real, pero mantiene retraso y posibles
+errores ASR. No se hizo una nueva matriz de remixes reales en este cambio.

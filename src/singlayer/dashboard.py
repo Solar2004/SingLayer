@@ -412,7 +412,7 @@ class Dashboard(QWidget):
         self.progress.setRange(0, 100)
         self._adjustment = None
         self.publish()
-        source = self.document if self.automatic_clock else (self.live_document or self.document)
+        source = self.display_document()
         if not self.reading_mode.currentIndex() or not source:
             return
         key = tuple(line["text"] for line in source["lines"])
@@ -483,7 +483,7 @@ class Dashboard(QWidget):
         QTimer.singleShot(95_000, deadline)
 
     def practice(self):
-        source = self.document if self.automatic_clock else (self.live_document or self.document)
+        source = self.display_document()
         if not self.guide or not source:
             self.activity.setText("Activa la guía de pronunciación en ⋯")
             return
@@ -758,14 +758,27 @@ class Dashboard(QWidget):
             terminate(self.overlay)
             self.overlay_attempted = False
 
+    def display_document(self):
+        if self.automatic_clock and self.document:
+            return self.document
+        position = (self.track or {}).get("position", 0)
+        if self.live_document and (not self.document or any(
+            line["start"] <= position <= line["end"] + 3
+            for line in self.live_document.get("lines", [])
+        )):
+            return self.live_document
+        # ASR windows arrive after capture/inference. A past fragment must not
+        # evict an available full catalog and leave the current song blank.
+        return self.document
+
     def publish(self, *_):
         adjustment = self.offset.value(), self.speed.value()
-        source_document = self.live_document or self.document
+        source_document = self.display_document()
         if self.automatic_clock and self.document:
             source_document = {**self.document, "source": "audio-clock",
                                "sourceName": "Reloj estimado automáticamente · tres referencias o más"}
             adjustment = self.automatic_clock["offset"], self.automatic_clock["speed"]
-        elif self.live_document:
+        elif source_document is self.live_document and self.live_document:
             adjustment = (0, 1)
         if self._source_document is not source_document or self._adjustment != adjustment:
             self._source_document = source_document
@@ -783,7 +796,7 @@ class Dashboard(QWidget):
         lines = (self._adjusted_document or {}).get("lines", [])
         position = (self.track or {}).get("position", 0)
         current = next((line for line in reversed(lines) if line["start"] <= position), None)
-        if self.live_document and not self.automatic_clock and current and current.get("end", position) < position - 3:
+        if source_document is self.live_document and not self.automatic_clock and current and current.get("end", position) < position - 3:
             current = None
 
         def display_text(line):

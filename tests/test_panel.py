@@ -318,3 +318,25 @@ def test_uncertain_or_cropped_upload_starts_acoustic_alignment(panel, monkeypatc
     doc = document(parse_lrc("[00:05]First original phrase\n[00:20]Later original phrase"), "test", "Demo", "Singer")
     panel.job_event({"finished": True, "result": {"document": doc}})
     assert panel.live_enabled
+
+
+
+def test_delayed_audio_does_not_remove_full_catalog_after_search(panel, monkeypatch):
+    panel.track = {**TRACK, "position": 42}
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    catalog = document(parse_lrc("[00:01]First original phrase\n[00:35]Current original phrase\n[01:00]Future original phrase"), "test", "Demo", "Singer")
+    panel.job_event({"finished": True, "result": {"document": catalog}})
+    panel.live_document = {"source": "whisper-vulkan", "lines": [
+        {"text": "Past acoustic phrase", "start": 4, "end": 9, "words": [], "translation": ""}]}
+    panel.publish()
+    assert len(panel._adjusted_document["lines"]) == 3
+    assert panel.lyric_preview.text() == "Current original phrase"
+    assert panel._source_document is catalog
+    # Seeking into a measured interval should still use its acoustic times.
+    panel.track = {**panel.track, "position": 6}
+    panel.publish()
+    assert panel.lyric_preview.text() == "Past acoustic phrase"
+    assert panel._source_document is panel.live_document
+    panel.track = {**panel.track, "position": 42}
+    panel.publish()
+    assert panel.lyric_preview.text() == "Current original phrase"

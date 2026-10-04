@@ -84,7 +84,7 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 140 pruebas completas, Ruff, shell y diff check pasan.
+- 141 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
@@ -109,7 +109,7 @@ La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográf
 y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
 no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
 
-Regresiones específicas y puerta completa:140 pruebas, Ruff y diff check pasan.
+Regresiones específicas y puerta completa:141 pruebas, Ruff y diff check pasan.
 
 ## Contexto de estribillos y cambios de sección
 
@@ -126,5 +126,17 @@ tramos medidos. Detección posterior al reconocimiento, no anticipación del cor
 
 Pruebas de regresión: repetición con/sin contexto, contexto roto por corte,
 invalidez del reloj anterior y reconstrucción con referencias nuevas. Puerta
-completa:140 pruebas. No se ha medido esta mejora contra anotaciones humanas de
+completa:141 pruebas. No se ha medido esta mejora contra anotaciones humanas de
 una nueva matriz de remixes reales.
+
+## Corrección de letra que desaparecía al finalizar
+
+Una ventana acústica retrasada no sustituye la letra completa si sus frases ya
+pasaron en el reproductor. Se mantiene el catálogo candidato mientras Whisper
+reúne referencias. Se usan los tramos medidos al reproducir su intervalo y el
+reloj completo cuando está calibrado. Sin catálogo, se conserva la transcripción
+con su limitación de retraso. Mantener el catálogo no demuestra que sus tiempos
+sean correctos: la comprobación acústica continúa.
+
+Regresión de UI: búsqueda terminada, fragmento atrasado, conservación de letra
+actual/completa, seek hacia tramo medido y regreso al catálogo.141 pruebas pasan.

@@ -16,3 +16,10 @@ def test_structural_edits_use_whisper_actual_words(title):
 def test_explicit_user_source_and_engine_remain_available():
     assert lyric_policy({"title": "Song Remix"}, "transcript", "crisper") == {"route": "transcript", "engine": "crisper"}
     assert lyric_policy({"title": "Song Remix"}, "catalog", "crisper") == {"route": "catalog", "engine": "crisper"}
+
+
+
+def test_missing_timed_catalog_uses_crisper_word_timing_but_remix_stays_whisper():
+    assert lyric_policy({"title": "Song"}, catalog_available=False) == {"route": "transcript", "engine": "crisper"}
+    assert lyric_policy({"title": "Song Remix"}, catalog_available=False) == {"route": "transcript", "engine": "whisper"}
+    assert lyric_policy({"title": "Song"}, engine="whisper", catalog_available=False) == {"route": "transcript", "engine": "whisper"}

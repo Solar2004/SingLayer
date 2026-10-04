@@ -8,7 +8,7 @@ STRUCTURAL_EDIT = re.compile(
 )
 
 
-def lyric_policy(track, source="auto", engine="auto"):
+def lyric_policy(track, source="auto", engine="auto", catalog_available=None):
     title = unicodedata.normalize("NFKC", (track or {}).get("title", ""))
     if source == "catalog":
         return {"route": "catalog", "engine": engine}
@@ -16,4 +16,6 @@ def lyric_policy(track, source="auto", engine="auto"):
         return {"route": "transcript", "engine": engine}
     if STRUCTURAL_EDIT.search(title):
         return {"route": "transcript", "engine": "whisper"}
+    if catalog_available is False:
+        return {"route": "transcript", "engine": "crisper" if engine == "auto" else engine}
     return {"route": "alignment", "engine": engine}

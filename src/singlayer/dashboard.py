@@ -109,6 +109,7 @@ class Dashboard(QWidget):
         self.clock_observed_at = None
         self.live_document = None
         self.catalog_candidates = []
+        self.catalog_resolved = False
         self.crisper = QProcess(self)
         self.crisper.setStandardOutputFile(QProcess.nullDevice())
         self.crisper.setStandardErrorFile(str(ROOT / ".build/crisper-server.log"))
@@ -676,6 +677,7 @@ class Dashboard(QWidget):
             self.guide = None
             self.cancel_job()
             self.document, self.plain, self.cover_revision = None, "", None
+            self.catalog_resolved = False
             self.cover.clear()
             self.cover.setText("♫")
             self.cover_attempts.clear()
@@ -818,7 +820,8 @@ class Dashboard(QWidget):
     def lyric_policy(self):
         from .lyrics_policy import lyric_policy
 
-        return lyric_policy(self.track, self.lyric_source, self.engine_preference)
+        return lyric_policy(self.track, self.lyric_source, self.engine_preference,
+                            bool(self.document) if self.catalog_resolved else None)
 
     def display_document(self):
         if self.lyric_policy()["route"] == "transcript":
@@ -1164,6 +1167,7 @@ class Dashboard(QWidget):
         process.start(sys.executable, ["-m", "singlayer.worker", "live"])
 
     def search(self, recognize=False, override=None):
+        self.catalog_resolved = False
         self.observed_document = None
         self.clock_anchors = {}
         self.automatic_clock = None
@@ -1262,6 +1266,7 @@ class Dashboard(QWidget):
             self.calibration_anchor = None
             result = event["result"]
             self.document, self.plain = result.get("document"), result.get("plain", "")
+            self.catalog_resolved = True
             self.catalog_candidates = result.get("candidates", [])
             self.restore_alignment()
             if self.document:

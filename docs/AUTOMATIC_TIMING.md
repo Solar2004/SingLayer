@@ -84,7 +84,7 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 160 pruebas completas, Ruff, shell y diff check pasan.
+- 162 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
@@ -109,7 +109,7 @@ La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográf
 y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
 no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
 
-Regresiones específicas y puerta completa:160 pruebas, Ruff y diff check pasan.
+Regresiones específicas y puerta completa:162 pruebas, Ruff y diff check pasan.
 
 ## Contexto de estribillos y cambios de sección
 
@@ -126,7 +126,7 @@ tramos medidos. Detección posterior al reconocimiento, no anticipación del cor
 
 Pruebas de regresión: repetición con/sin contexto, contexto roto por corte,
 invalidez del reloj anterior y reconstrucción con referencias nuevas. Puerta
-completa:160 pruebas. No se ha medido esta mejora contra anotaciones humanas de
+completa:162 pruebas. No se ha medido esta mejora contra anotaciones humanas de
 una nueva matriz de remixes reales.
 
 ## Corrección de letra que desaparecía al finalizar
@@ -139,7 +139,7 @@ con su limitación de retraso. Mantener el catálogo no demuestra que sus tiempo
 sean correctos: la comprobación acústica continúa.
 
 Regresión de UI: búsqueda terminada, fragmento atrasado, conservación de letra
-actual/completa, seek hacia tramo medido y regreso al catálogo.160 pruebas pasan.
+actual/completa, seek hacia tramo medido y regreso al catálogo.162 pruebas pasan.
 
 ## Elección de letra y motor
 
@@ -156,7 +156,7 @@ falla con mensaje, no cambia silenciosamente a CPU. Crisper CPU está instalado
 pero sus resultados de canto pueden ser peores; no se presenta como GPU.
 
 Regresiones: texto acústico directo con catálogo disponible, cambio a catálogo,
-persistencia de elección y limpieza al cambiar motor.160 pruebas completas pasan.
+persistencia de elección y limpieza al cambiar motor.162 pruebas completas pasan.
 
 ## Catálogo candidato e instrumental
 
@@ -176,7 +176,7 @@ No se garantiza detectar todas las alucinaciones con texto plausible.
 Se evaluó Silero VAD6.2.0 a umbrales0.5 y0.1: descartó también canto japonés real.
 NO se activó esa dependencia en producción ni se filtró todo canto como silencio.
 El modelo y herramienta experimental permanecen locales; el instalador no los
-requiere. Evidencia de regresión y puerta completa:160 pruebas, Ruff/diff OK.
+requiere. Evidencia de regresión y puerta completa:162 pruebas, Ruff/diff OK.
 
 ## Flujo de autoridad de la letra
 
@@ -202,8 +202,24 @@ servicio propio correspondiente y se separan cachés por motor/ruta.
 Regresiones: límites de palabras (Cutting Crew/Sloop no son cuts/loops), speed
 up sigue alineación, títulos remix eligen Whisper, texto remix no heredado del
 catálogo, sin ajustes de reloj original, elecciones explícitas preservadas y
-Shazam corroborado antes de devolver una letra confirmada.160 pruebas pasan.
+Shazam corroborado antes de devolver una letra confirmada.162 pruebas pasan.
 
 Este flujo ordena evidencias; no garantiza toda música perfecta ni texto futuro
 antes de capturar voz. Un remix usa audio real, pero mantiene retraso y posibles
 errores ASR. No se hizo una nueva matriz de remixes reales en este cambio.
+
+## Sin catálogo con tiempos
+
+Al terminar la búsqueda sin documento sincronizado, Automático pasa a
+transcripción acústica. Con motor automático se selecciona CrisperWhisper CPU
+para conservar tiempos por palabra; una elección explícita Whisper se respeta.
+Los remixes mantienen Whisper. Tener solo texto de Genius no proporciona tiempos
+ni impide la transcripción. Antes de terminar la búsqueda no se considera que el
+catálogo esté ausente; esto evita cambios prematuros de motor.
+
+La vista/overlay muestra las palabras medidas y sus tiempos del navegador, sin
+inventar timestamps a partir del texto de catálogo. La guía de pronunciación,
+si está activada, conserva tiempos por línea pero desactiva resaltado de palabra.
+Si no se reconoce voz fiable, no hay transcripción que mostrar. Crisper small
+CPU puede ser impreciso con canto: no se garantiza producir la letra correcta
+para cualquier instrumental, canción o efecto.162 pruebas completas pasan.

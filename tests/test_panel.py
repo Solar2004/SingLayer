@@ -393,3 +393,22 @@ def test_automatic_remix_uses_whisper_transcript_without_catalog_replacement(pan
     assert panel._adjusted_document["lines"][0]["start"] == 10
     assert panel.lyric_preview.text() == "Words actually sung in remix"
     assert panel.link.document["lines"][0]["text"] == "Words actually sung in remix"
+
+
+
+def test_no_catalog_shows_crisper_words_with_original_acoustic_times(panel, monkeypatch):
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    panel.lyric_source = "auto"
+    panel.engine_preference = "auto"
+    panel.track = TRACK
+    panel.job_event({"finished": True, "result": {"plain": "Untimed text cannot supply a clock"}})
+    assert panel.lyric_policy() == {"route": "transcript", "engine": "crisper"}
+    panel.observed_document = {"source": "crisperwhisper-local", "timing": "Word", "lines": [
+        {"text": "Actual timed words", "start": 10, "end": 14, "translation": "", "words": [
+            {"text": "Actual", "start": 10, "end": 11},
+            {"text": " timed", "start": 11.5, "end": 12},
+            {"text": " words", "start": 13, "end": 14}]}]}
+    panel.publish()
+    assert panel.lyric_preview.text() == "Actual timed words"
+    assert panel.link.document["timing"] == "Word"
+    assert panel.link.document["lines"][0]["words"][1]["start"] == 11.5

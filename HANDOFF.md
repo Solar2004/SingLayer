@@ -3,6 +3,13 @@
 Actualizado: 2026-10-04 (validación completa y runtime instalado). Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
+## Última prueba musical — 2026-10-04
+
+Siete ventanas reales, cuatro canciones: Shazam6/6; alineación parcial inglesa y
+japonesa, cero coincidencias fiables en After Dark/Honeypie alteradas. Recortes
+y reconstrucción de reloj probados al rebasing de ASR musical real. Contexto de
+estribillos sin caso positivo en esta tanda. Ver docs/MUSIC_VALIDATION_CURRENT.md.
+
 ## Estado actual — sincronización automática 2026-10-04
 
 Esta sección reemplaza las restricciones y decisiones históricas inferiores.

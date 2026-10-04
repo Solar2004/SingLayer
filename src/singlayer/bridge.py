@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 import logging
 import signal
 import time
@@ -15,6 +16,7 @@ from dbus_fast.constants import NameFlag, RequestNameReply
 
 from .artwork import safe_cover_url
 from .mpris import BUS_NAME, OBJECT_PATH, MediaPlayer, Root
+from .source_link import matching_source, source_message
 from .state import PlayerStore
 
 LOG = logging.getLogger(__name__)
@@ -31,6 +33,7 @@ class Bridge:
         self.command_id = 0
         self.covers = {}
         self.browser_families = {}
+        self.source_connections = {}
 
     def receive_cover(self, connection, data):
         if not 12 < len(data) <= 1_500_000:
@@ -121,13 +124,40 @@ class Bridge:
             LOG.info("Browser adapter disconnected (%s)", connection)
         return ws
 
+    async def source_socket(self, request):
+        origin = request.headers.get("Origin", "")
+        if urlsplit(origin).scheme not in {"chrome-extension", "moz-extension"}:
+            raise web.HTTPForbidden(text="Only browser extensions may connect")
+        ws = web.WebSocketResponse(heartbeat=15, max_msg_size=4096)
+        await ws.prepare(request)
+        entries = {}
+        self.source_connections[ws] = entries
+        try:
+            async for message in ws:
+                if message.type != WSMsgType.TEXT:
+                    continue
+                try:
+                    value = json.loads(message.data)
+                    for old in list(entries):
+                        if time.monotonic() - entries[old]["at"] >= 8:
+                            del entries[old]
+                    tab = value["tab"]
+                    if not isinstance(tab, int) or len(entries) >= 32 and tab not in entries:
+                        raise ValueError("Invalid source tab")
+                    entries[tab] = source_message(value)
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    continue
+        finally:
+            self.source_connections.pop(ws, None)
+        return ws
+
     async def health(self, request):
         return web.json_response(
             {"service": "singlayer", "browsers": len(self.connections), "players": len(self.store.players)}
         )
 
     async def shutdown(self, app):
-        for ws in list(self.connections.values()):
+        for ws in list(self.connections.values()) + list(self.source_connections):
             await ws.close(code=1001, message=b"SingLayer stopping")
 
     async def status(self, request):
@@ -146,6 +176,7 @@ class Bridge:
                     "title": player.data.get("title", ""),
                     "id": player.track_id,
                     "source": player.data.get("name", ""),
+                    "url": matching_source([entry for entries in self.source_connections.values() for entry in entries.values()], player),
                     "cover": cover[0] if cover and player.data.get("cover") else None,
                     "cover_url": safe_cover_url(player.data.get("cover")),
                     "artist": player.data.get("artist", ""),
@@ -179,6 +210,7 @@ class Bridge:
     def app(self):
         app = web.Application()
         app.router.add_get("/", self.websocket)
+        app.router.add_get("/source", self.source_socket)
         app.router.add_get("/health", self.health)
         app.router.add_get("/status", self.status)
         app.router.add_get("/cover", self.cover)

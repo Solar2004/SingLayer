@@ -2,7 +2,7 @@
 
 Estado actual: [sincronización automática](AUTOMATIC_TIMING.md).
 
-- 188 pruebas completas pasan, sin exclusiones; Ruff, shell y diff check aprobados.
+- 200 pruebas completas pasan, sin exclusiones; Ruff, shell y diff check aprobados.
 - Whisper.cpp large-v3-turbo Q5_0 instalado y probado con RX590 Vulkan y DTW.
 - Vista de frases con inicio/final, duración real y reloj automático estimado.
 - Night Changes sped up: cinco referencias, velocidad1.233×, desfase2.842s;

@@ -1,0 +1,12 @@
+const assert = require('node:assert/strict');
+const {singlayerSource} = require('./extract.js');
+const doc = values => ({querySelector: selector => values[selector] || null});
+const clock = {getAttribute: () => '192'};
+const current = {href:'https://soundcloud.com/artist/exact-ultra-slowed?in=list', title:'Song ULTRA SLOWED'};
+assert.deepEqual(singlayerSource(doc({'a.playbackSoundBadge__titleLink':current,'.playbackTimeline__progressWrapper':clock}), {hostname:'soundcloud.com'}), {url:'https://soundcloud.com/artist/exact-ultra-slowed', title:current.title, duration:192});
+assert.equal(singlayerSource(doc({}), {hostname:'soundcloud.com'}), null);
+const ytTitle = 'ytd-watch-metadata h1 yt-formatted-string, h1.ytd-watch-metadata, .content-info-wrapper yt-formatted-string.title';
+const youtube = doc({'video':{duration:240.21},[ytTitle]:{textContent:' Song remix '}});
+assert.deepEqual(singlayerSource(youtube,{href:'https://www.youtube.com/watch?v=exact&list=playlist',pathname:'/watch'}),{url:'https://www.youtube.com/watch?v=exact',title:'Song remix',duration:240.21});
+assert.equal(singlayerSource(youtube,{href:'https://www.youtube.com/results?search_query=song',pathname:'/results'}), null);
+console.log('Source extraction: 4 checks passed');

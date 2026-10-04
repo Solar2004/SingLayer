@@ -37,6 +37,8 @@ line start/end ranges, duration clipping, replay history and saved corrections. 
 measured limits](docs/CRISPERWHISPER.md). Real catalog tests covered five SoundCloud
 variants; automatic timing on arbitrary remixes is not guaranteed.
 
+An optional [source-link companion extension](docs/AUTOMATIC_SOURCE.md) enables automatic full-track analysis for SoundCloud and YouTube. Load it once in your browser and reload the music tab; browser installation remains a manual step.
+
 Full-track analysis is available in **⋯ → Analizar pista completa desde enlace**. It downloads the exact public upload, checks decoded duration, analyzes the entire timeline locally and removes temporary audio. Up to 16 transcripts remain in the local cache. [Usage, real tests and limits](docs/FULL_TRACK.md).
 
 Latest validation and environment limitations are in [HANDOFF.md](HANDOFF.md).

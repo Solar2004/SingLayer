@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "SingLayer — enlace automático",
+  "version": "1.0.0",
+  "description": "Entrega a SingLayer el enlace exacto del reproductor de SoundCloud o YouTube, solo por loopback local.",
+  "background": {"service_worker": "background.js"},
+  "host_permissions": ["http://127.0.0.1:8975/*"],
+  "content_scripts": [{"matches": ["https://soundcloud.com/*", "https://www.youtube.com/*", "https://music.youtube.com/*"], "js": ["extract.js", "content.js"]}],
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:8975"}
+}

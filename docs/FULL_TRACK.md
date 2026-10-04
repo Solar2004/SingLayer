@@ -1,5 +1,7 @@
 # Análisis de pista completa — 2026-10-04
 
+Con la [extensión de enlace automático](AUTOMATIC_SOURCE.md) cargada, SoundCloud y YouTube inician el análisis completo por pista sin pegar enlaces. Sin ella, usa el método manual siguiente.
+
 En **⋯ Ajustes → Analizar pista completa desde enlace**, pega el enlace exacto de la versión abierta en el navegador. El panel comprueba título y duración, descarga el audio completo, lo decodifica y analiza ventanas de 24 segundos con avance de 16 segundos, incluyendo el final. Los tiempos resultantes siguen la posición del reproductor al avanzar o retroceder. No se sustituye un remix por una búsqueda de la versión original.
 
 Se utiliza el motor seleccionado: Whisper.cpp Vulkan o CrisperWhisper CPU. En automático, los remixes conservan el texto acústico; para canciones normales solo se reemplaza texto por catálogo cuando existe una coincidencia única suficientemente fuerte. Se conservan los tiempos medidos. Puedes elegir solo transcripción para mostrar el texto acústico original.
@@ -11,7 +13,7 @@ El audio temporal se elimina al terminar o cancelar. Se guardan hasta 16 resulta
 - Enlaces HTTPS públicos de YouTube, SoundCloud, Bandcamp, Vimeo, Mixcloud, Dailymotion y Audiomack; pista individual, hasta 15 minutos y 100 MB. No se ha probado cada servicio.
 - `yt-dlp[default]==2026.8.19` y FFmpeg; YouTube se probó con Node 24.15.0 como runtime JavaScript. El analizador usa Node cuando está disponible en PATH.
 - Sin cookies del navegador: acceso restringido, login o descargas bloqueadas producen un error. Se comprueba la duración decodificada para rechazar previews o descargas incompletas.
-- WebNowPlaying no entrega la URL de la página: se necesita el enlace exacto. La lectura de Brave mediante la herramienta de navegador falló por «Unable to load browser request-header policy»; no se pudo recuperar la URL de la pista actual.
+- WebNowPlaying no entrega la URL de la página: la extensión propia aporta el enlace exacto. Sin ella, hay que pegarlo manualmente. La lectura de Brave volvió a funcionar, pero la herramienta bloqueó su página de extensiones; la instalación debe completarse manualmente una vez.
 - Puede tardar varios minutos. Transcripción y tiempos acústicos son estimados: voces muy alteradas e instrumentales todavía pueden producir errores. No se garantiza sincronización perfecta.
 
 ## Pruebas reales

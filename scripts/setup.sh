@@ -12,4 +12,8 @@ uv pip install --python .venv/bin/python --no-deps -e .
 uv pip install --python .venv/bin/python --no-deps ./upstream/kotonoha
 uv pip install --python .venv/bin/python -r requirements-engines.txt
 bash scripts/setup-recognizer.sh
+SINGLAYER_SOURCE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/singlayer/source-link"
+install -d "$SINGLAYER_SOURCE_DIR"
+install -m 644 browser/source-link/*.js browser/source-link/manifest.json "$SINGLAYER_SOURCE_DIR/"
+printf 'Automatic source-link extension prepared in %s\n' "$SINGLAYER_SOURCE_DIR"
 echo 'Ready. Add a WebNowPlaying custom adapter on port 8975, then run .venv/bin/singlayer app'

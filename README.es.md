@@ -135,6 +135,8 @@ se conservan. La transcripción directa necesita escuchar y llega con retraso.
 
 ## Analizar toda la pista
 
+Para que SoundCloud y YouTube lo hagan automáticamente, [carga una vez la extensión de enlace automático](docs/AUTOMATIC_SOURCE.md) y recarga la pestaña. La carpeta ya está preparada por setup.sh. El análisis comienza por pista sin copiar enlaces.
+
 En **⋯ Ajustes → Analizar pista completa desde enlace**, pega el enlace exacto de SoundCloud o YouTube. Descarga y analiza toda esa versión, verifica su duración y prepara los tiempos para seguir la reproducción y los saltos. El audio temporal se elimina; hasta 16 transcripciones se conservan en caché local. Puede tardar varios minutos y los tiempos son estimados. [Pruebas y servicios admitidos](docs/FULL_TRACK.md).
 
 ## Transcripción y versiones editadas

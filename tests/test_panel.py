@@ -447,3 +447,37 @@ def test_complete_audio_timing_is_available_for_future_and_seek(panel):
     panel.track = {**panel.track, 'position': 6}
     panel.publish()
     assert panel.lyric_preview.text() == 'Earlier measured words'
+
+
+def test_automatic_full_track_only_once_with_ready_exact_url(panel, monkeypatch):
+    import time
+
+    panel.lyric_source = 'auto'
+    panel.track = {**TRACK, 'url': 'https://soundcloud.com/singer/song'}
+    panel.wanted = True
+    panel.track_seen_at = time.monotonic()-4
+    calls = []
+    monkeypatch.setattr(panel, 'analyze_full_track', calls.append)
+    panel.maybe_full_track()
+    panel.maybe_full_track()
+    assert calls == [panel.track['url']]
+
+
+def test_automatic_full_track_waits_for_current_playback_and_search(panel, monkeypatch):
+    import time
+
+    calls = []
+    monkeypatch.setattr(panel, 'analyze_full_track', calls.append)
+    panel.lyric_source = 'auto'
+    panel.wanted = True
+    panel.track_seen_at = time.monotonic()-4
+    for patch in ({'url': None}, {'playing': False}, {'stale': True}):
+        panel.track = {**TRACK, 'url': 'https://soundcloud.com/singer/song', **patch}
+        panel.maybe_full_track()
+    panel.track = {**TRACK, 'url': 'https://soundcloud.com/singer/song'}
+    panel.job = object()
+    panel.maybe_full_track()
+    panel.job = None
+    panel.track_seen_at = time.monotonic()
+    panel.maybe_full_track()
+    assert calls == []

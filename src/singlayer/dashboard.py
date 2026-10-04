@@ -108,6 +108,8 @@ class Dashboard(QWidget):
         self.full_document = None
         self.full_original_document = None
         self.full_completed = False
+        self.full_attempts = set()
+        self.track_seen_at = 0
         self.live_epoch = 0
         self.live_enabled = False
         self.live_retry_at = 0
@@ -683,7 +685,12 @@ class Dashboard(QWidget):
         self.extension_button.setVisible(not count)
         track = data.get("track")
         identity, previous = track.get("id") if track else None, self.track.get("id") if self.track else None
-        if identity != previous:
+        changed_url = (track and self.track and track.get("url") and self.track.get("url")
+                       and track["url"] != self.track["url"])
+        if identity != previous or changed_url:
+            import time
+
+            self.track_seen_at = time.monotonic()
             self.cancel_full_track()
             self.full_document = None
             self.full_original_document = None
@@ -753,6 +760,7 @@ class Dashboard(QWidget):
         ):
             self.resume_search = False
             self.search()
+        self.maybe_full_track()
         self.publish()
 
     def fetch_cover(self, revision, identity):
@@ -1373,6 +1381,23 @@ class Dashboard(QWidget):
             QTimer.singleShot(3800, force_stop)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
+
+    def maybe_full_track(self):
+        import time
+
+        track = self.track or {}
+        url = track.get("url")
+        if (self.lyric_source == "catalog" or not self.wanted or not url or not track.get("playing") or track.get("stale")
+                or self.job or self.full_job or self.full_completed
+                or time.monotonic() - self.track_seen_at < 3):
+            return
+        key = (track["id"], url, self.lyric_policy()["engine"])
+        if key in self.full_attempts:
+            return
+        if len(self.full_attempts) >= 32:
+            self.full_attempts.clear()
+        self.full_attempts.add(key)
+        self.analyze_full_track(url)
 
     def full_track_dialog(self):
         if not self.track:

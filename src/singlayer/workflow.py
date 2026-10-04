@@ -121,6 +121,7 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
     if identity["edited"]:
         emit({"stage": "timing", "state": "warning", "detail": "Versión editada: ajusta desfase y velocidad"})
     lookups = {}
+    recognition_result = {}
     slots = asyncio.Semaphore(4)
 
     async def limited(action, payload, timeout):
@@ -172,7 +173,7 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
         return None
 
     async def audio_lookup():
-        nonlocal identity
+        nonlocal identity, recognition_result
         votes = []
         best = None
         for attempt in range(1, 4):
@@ -207,6 +208,11 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
             )
             if len(group) >= 2:
                 identity = {**best, "duration": None}
+                recognition_result = {
+                    "recognized": best,
+                    "evidence": {"matches": len(group), "samples": attempt,
+                                 "confirmed": False, "recognition_confirmed": True},
+                }
                 result = await lookup(identity)
                 if result:
                     return {
@@ -214,6 +220,15 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
                         "recognized": best,
                         "evidence": {"matches": len(group), "samples": attempt, "confirmed": True},
                     }
+                # Shazam may identify a separately released slowed/remix recording.
+                # Its artist and duration cannot establish the original lyrics.
+                normalized = search_identity(best)
+                if normalized["edited"]:
+                    for candidate in (normalized, {**normalized, "artist": ""}):
+                        result = await lookup(candidate)
+                        if result:
+                            return {**result, **recognition_result,
+                                    "candidates": [result["document"]]}
         # One hit is not corroboration; preserve as a labelled fallback only.
         if best and len(votes) == 1:
             identity = {**best, "duration": None}
@@ -276,6 +291,10 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
                     continue
                 return result
         if fallback:
+            if recognition_result:
+                fallback = {**fallback, "recognized": recognition_result["recognized"],
+                            "evidence": {**fallback.get("evidence", {}),
+                                         "recognition_confirmed": True}}
             return fallback
     finally:
         for task in [*paths, *lookups.values()]:
@@ -295,7 +314,7 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
                 else result.get("error", "Sin coincidencia"),
             }
         )
-        return result if result.get("plain") else {}
+        return {**recognition_result, **result} if result.get("plain") else recognition_result
     except Exception as error:
         emit({"stage": "Genius", "state": "error", "detail": str(error)[:180]})
-        return {}
+        return recognition_result

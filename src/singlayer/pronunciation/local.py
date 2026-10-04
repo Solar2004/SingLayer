@@ -26,7 +26,7 @@ def local_guide(texts):
     from langid.langid import LanguageIdentifier, model
 
     detector = LanguageIdentifier.from_modelstring(model, norm_probs=True)
-    overall = detector.classify(" ".join(texts))[0]
+    overall, overall_confidence = detector.classify(" ".join(texts))
     lib = espeakng_loader.load_library()
     if lib is None:
         raise RuntimeError("Motor fonético local no disponible")
@@ -50,7 +50,13 @@ def local_guide(texts):
                 guide.append(cache[text])
                 continue
             language, confidence = detector.classify(text)
-            if confidence < .85 and len(text.split()) < 5:
+            words = re.findall(r"[^\W\d_]+", text.casefold())
+            repetitive_latin = text.isascii() and len(set(words)) <= 3
+            # Language scores for short refrains can be confidently wrong.
+            # Prefer a confident song context for repetitive Latin phrases;
+            # keep informative foreign lines and other scripts independent.
+            if (confidence < .85 and len(text.split()) <= 5
+                    or repetitive_latin and overall_confidence >= .85):
                 language = overall
             if language == "ja":
                 from pykakasi import kakasi

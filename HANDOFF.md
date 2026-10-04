@@ -1,22 +1,47 @@
 # SingLayer — handoff completo
 
-Actualizado: 2026-10-04. Este archivo es el punto de entrada canónico y debe leerse
+Actualizado: 2026-10-04 (validación completa y runtime instalado). Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
-## Continuación 2026-10-04
+## Estado actual — validación 2026-10-04
 
-- Red concedida: fetch y push completados. main remoto verificado en
-  d7ccb42c0cbb42c21cd11802b37f9fec3e394025 antes de esta actualización.
-- Compilación C++ intentada: clone falló con Repository not found; API GitHub 404.
-  No usar mirrors sin verificar procedencia/revisión.
-- Lectura de /dev/dri concedida, pero el directorio sigue ausente. GPU no probada.
-- Regresión repetida: 98 passed, 4 deselected.
-- Instalación CPU de referencia reintentada, interrumpida durante la descarga
-  lenta de torch; no llegó a convertir pesos ni generar ready.json.
-  Reejecutar bash scripts/setup-crisper.sh para completar ese baseline.
+Esta sección sustituye los bloqueos históricos descritos más abajo.
 
-Las secciones históricas inferiores describen los bloqueos de la sesión anterior;
-esta actualización y docs/GPU.md registran lo comprobado en la continuación.
+- Push completado. d7ccb42 y ab5b399 publicados y verificados en origin/main;
+  las correcciones de esta validación se publican en un commit posterior.
+- **109 pruebas completas pasan, cero exclusiones**; Ruff, shell y diff check OK.
+- Panel, bridge y Kotonoha arrancaron en el escritorio real; WNP Brave/SoundCloud
+  envió pista, portada URL y reloj. No se capturó screenshot del compositor.
+- ShazamIO Python 3.12 probado con audio real: Honeypie (Slowed + Bass Boosted)
+  → Thorstentekk, consenso 3/3. Reconoció también Hymn for the Weekend / Coldplay
+  durante el autoplay; catálogo real LRCLIB devolvió 50 líneas para esa identidad.
+- Se corrigió lookup de ediciones reconocidas: título normalizado y fallback sin
+  artista. Honeypie → JAWNY, 28 líneas LRCLIB. Se reusó la identidad observada para
+  probar la búsqueda corregida contra el catálogo real; no hubo segunda captura
+  completa de Honeypie tras el fix. La letra permanece candidata: el consenso de
+  una edición no confirma automáticamente la letra original ni su reloj.
+- Guía local real de Honeypie: 28/28 líneas inglés tras corregir contexto en
+  estribillos cortos/repetitivos; antes se detectaban húngaro/alemán erróneamente.
+- **CrisperWhisper instalado en CPU int8**, ready.json existe. Modelo oficial small
+  fijado a bcaecf0a584a1f600d8897fe6032b9e2e56429a7. Runtime 2.0.3 / CT2 fork
+  4.7.1.post3. Xet se atascó; HTTP con HF_HUB_DISABLE_XET=1 descargó los pesos.
+- Se corrigió la pérdida de campos nativos CT2 al convertir: lang_ids, suppress_ids,
+  suppress_ids_begin y alignment_heads reconstruidos desde metadata del checkpoint.
+  Sin lang_ids, detect_language fallaba con RuntimeError nativo en la API real.
+  Setup ahora comprueba detección acústica antes de publicar ready.json.
+- API real JFK: inglés, 11 s audio, 8.56 s inferencia, 22 palabras / 4 líneas.
+  Último end=11.02 s: el adaptador ya limita ese borde dentro de tolerancia 100 ms.
+  Documento válido dentro de ventana. Es voz, NO prueba de calidad musical ni GPU.
+- RX590 GME RADV POLARIS10, Mesa26.1.8 expuesta y verificada con vulkaninfo.
+  **GPU Crisper pendiente**: repositorio C++ original y API GitHub siguen en404.
+  No se compiló ni se sustituyó por un mirror de procedencia no comprobada.
+- Se reiniciaron solo los procesos propios. Al finalizar la comprobación no había
+  pista WNP ni flujo audible del navegador: prueba musical del nuevo ASR pendiente.
+  La herramienta CUA Brave sigue fallando por request-header policy; usuario
+  debe iniciar la reproducción para continuar la comprobación de su canción.
+
+Ver docs/READINESS.md para alcance y comprobaciones pendientes. Las secciones
+inferiores son contexto histórico y arquitectura, no el estado de instalación actual.
 
 ## 1. Objetivo y decisiones del usuario
 

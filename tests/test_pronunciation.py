@@ -93,3 +93,17 @@ def test_spanish_reading_handles_multicharacter_phonemes_before_single_letters()
     from singlayer.pronunciation.local import spanish_reading
 
     assert spanish_reading("ˈtʃaɪld dʒɔɪ ʃuː θɪŋ") == "chái ld yoi shu thing".replace("ái ld", "áild")
+
+
+def test_short_repeated_english_chorus_uses_song_context():
+    pytest.importorskip("espeakng_loader")
+    pytest.importorskip("langid")
+    from singlayer.pronunciation.local import local_guide
+
+    result = local_guide([
+        "I will keep singing with you until the morning comes and we go home together.",
+        "Oh honey, honeypie, honey, honey, honeypie",
+        "Oh girl, don't you stop",
+    ])
+    assert all(item["tip"].startswith("Idioma en") for item in result)
+    assert result[1]["phonetic"] != "Oh honey, honeypie, honey, honey, honeypie"

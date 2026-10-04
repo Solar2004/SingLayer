@@ -204,3 +204,39 @@ def test_catalog_cleaning_preserves_legitimate_titles(title):
     from singlayer.workflow import catalog_text
 
     assert catalog_text(title) == title
+
+
+@pytest.mark.asyncio
+async def test_recognized_edit_finds_original_lyrics_without_claiming_identity():
+    calls = []
+
+    async def invoke(action, data, timeout):
+        calls.append((action, data))
+        if action == "recognize":
+            return {"title": "Honeypie (Slowed + Bass Boosted)", "artist": "Thorstentekk", "recording_id": "edit-123"}
+        if data.get("title") == "Honeypie" and data.get("artist") == "":
+            return {"document": {"source": "lrclib", "title": "Honeypie", "artist": "JAWNY"}}
+        return {}
+
+    result = await resolve(
+        {"title": "Honeypie (Slowed + Bass Boosted)", "artist": "VYRUS", "source": "SoundCloud"},
+        invoke, lambda e: None, recognize=True, audio_allowed=True,
+    )
+    assert result["document"]["artist"] == "JAWNY"
+    assert result["recognized"]["recording_id"] == "edit-123"
+    assert result["evidence"]["recognition_confirmed"]
+    assert not result["evidence"]["confirmed"]
+    assert sum(action == "recognize" for action, _ in calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_confirmed_recording_survives_missing_lyrics():
+    async def invoke(action, data, timeout):
+        if action == "recognize":
+            return {"title": "Unknown song", "artist": "Singer", "recording_id": "123"}
+        return {}
+
+    result = await resolve(TRACK, invoke, lambda e: None, recognize=True, audio_allowed=True)
+    assert result["recognized"]["recording_id"] == "123"
+    assert result["evidence"]["recognition_confirmed"]
+    assert "document" not in result

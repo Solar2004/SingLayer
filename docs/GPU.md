@@ -1,7 +1,7 @@
 # CrisperWhisper on RX590: investigation and next proof
 
 2026-10-04. **Not yet working or validated on GPU.** Current integrated backend
-is CrisperWhisper2.0 Python/CTranslate2 CPU int8, and it is not installed yet.
+is CrisperWhisper2.0 Python/CTranslate2 CPU int8, now installed and tested on real speech.
 
 ## Findings from source, rather than package names
 
@@ -76,3 +76,12 @@ Vulkan inference and timing validation still require an environment with the
 actual device and a verifiable source revision. No drivers were changed.
 
 Regression check: 98 passed, 4 IPC-dependent tests deselected.
+
+## Full-access validation — 2026-10-04
+
+The host GPU is now exposed: vulkaninfo identified RX590 GME / RADV POLARIS10,
+Mesa26.1.8. The absent-device note above describes the earlier sandbox only.
+The source repository still returns HTTP404, so no Crisper Vulkan build or GPU
+inference was verified. Official CPU runtime/model installation succeeded.
+Real JFK API inference took8.56s for11s audio with22 words and detected English;
+this is a CPU speech baseline, not a singing or AMD Crisper benchmark.

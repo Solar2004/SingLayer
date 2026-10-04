@@ -203,3 +203,18 @@ def test_sped_up_catalog_enables_acoustic_alignment(panel, monkeypatch):
     doc = document(parse_lrc("[00:01]Original demonstration line"), "test", "Demo", "Singer")
     panel.job_event({"finished": True, "result": {"document": doc}})
     assert panel.live_enabled
+
+
+def test_browser_choice_restarts_capture_and_sets_worker_environment(panel, monkeypatch):
+    calls = []
+    panel.wanted = True
+    panel.track = TRACK
+    panel.audio_target = {"backend": "pipewire", "serial": 123}
+    for name in ("cancel_job", "stop_live", "probe_audio", "search"):
+        monkeypatch.setattr(panel, name, lambda name=name, **kwargs: calls.append(name))
+    monkeypatch.setattr(panel.meter, "stop", lambda: calls.append("meter"))
+    panel.browser.setCurrentText("Brave")
+    assert panel.audio_environment().value("SINGLAYER_BROWSER") == "Brave"
+    assert panel.settings.value("browser-label") == "Brave"
+    assert panel.audio_target is None
+    assert calls == ["cancel_job", "stop_live", "meter", "probe_audio", "search"]

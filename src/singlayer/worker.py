@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import io
 import json
+import os
 import shutil
 import signal
 import sys
@@ -12,7 +13,7 @@ import wave
 from dataclasses import asdict
 from pathlib import Path
 
-from .browser_audio import capture_args, select_stream
+from .browser_audio import capture_command, select_pipewire_stream, select_stream
 from .diagnostics import record
 from .workflow import resolve
 
@@ -147,17 +148,31 @@ async def alternatives(data):
 
 
 async def audio_target(title=""):
-    inputs, sinks = await asyncio.gather(
-        command(["pactl", "-f", "json", "list", "sink-inputs"], timeout=3),
-        command(["pactl", "-f", "json", "list", "sinks"], timeout=3),
-    )
-    return select_stream(json.loads(inputs), json.loads(sinks), title)
+    browser = os.environ.get("SINGLAYER_BROWSER", "")
+    try:
+        inputs, sinks = await asyncio.gather(
+            command(["pactl", "-f", "json", "list", "sink-inputs"], timeout=3),
+            command(["pactl", "-f", "json", "list", "sinks"], timeout=3),
+        )
+        target = select_stream(json.loads(inputs), json.loads(sinks), title, browser)
+        if target:
+            return target
+    except (OSError, RuntimeError, TimeoutError, ValueError):
+        pass
+    # Native PipeWire streams are not necessarily visible to pactl.
+    # The graph includes sources too: selection strictly requires browser output.
+    if not shutil.which("pw-dump") or not shutil.which("pw-record"):
+        return None
+    try:
+        objects = json.loads(await command(["pw-dump"], timeout=3))
+        return select_pipewire_stream(objects, title, browser)
+    except (OSError, RuntimeError, TimeoutError, ValueError):
+        return None
 
 
 async def browser_sample(target):
     process = await asyncio.create_subprocess_exec(
-        "parec",
-        *capture_args(target),
+        *capture_command(target),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )

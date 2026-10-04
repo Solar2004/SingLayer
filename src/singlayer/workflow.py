@@ -7,7 +7,18 @@ from difflib import SequenceMatcher
 
 NATIVE = ("lrclib", "netease", "kugou")
 EXTRA = ("Musixmatch", "Megalobiz")
-EDIT = re.compile(r"\b(?:slowed(?:[ _-]*down)?|spe(?:d|ed)[ _-]*up|nightcore|daycore|reverb|pitched|remix|mashup|looped|snippet|edit(?:[ _-]*audio)?)\b", re.I)
+EDIT = re.compile(r"\b(?:slowed(?:[ _-]*down)?|spe(?:d|ed)[ _-]*up|nightcore|daycore|reverb(?:ed)?|pitched|muffled|bass[ _-]*boost(?:ed)?|8d(?:[ _-]*audio)?|tiktok[ _-]*(?:version|edit)|remix|mashup|looped|snippet|edit(?:[ _-]*audio)?|\d+(?:\.\d+)?x)\b", re.I)
+EDIT_WORDS = {"slowed", "down", "sped", "speed", "up", "nightcore", "daycore", "reverb", "reverbed",
+              "pitched", "remix", "mashup", "looped", "snippet", "edit", "audio", "extra", "and", "muffled",
+              "bass", "boost", "boosted", "8d", "tiktok", "version", "to", "perfection"}
+SEPARATOR = r"\s+(?:[-–—|]|//)\s+"
+
+
+def edit_suffix(value):
+    tokens = re.findall(r"\w+", value.casefold())
+    return bool(EDIT.search(value) and tokens and all(
+        word in EDIT_WORDS or re.fullmatch(r"\d+(?:x|db)?", word) for word in tokens
+    ))
 
 
 def catalog_text(value):
@@ -18,14 +29,9 @@ def catalog_text(value):
                    lambda m: "" if EDIT.search(m.group(1)) else m.group(0), value)
     # Unbracketed editing suffixes are common on SoundCloud.
     marker = EDIT.search(value)
-    if marker and marker.start() > 0 and all(
-        word in {"slowed", "down", "sped", "speed", "up", "nightcore", "daycore",
-                 "reverb", "pitched", "remix", "mashup", "looped", "snippet", "edit",
-                 "audio", "extra", "and", "muffled"}
-        for word in re.findall(r"\w+", value[marker.start():].casefold())
-    ):
-        value = value[:marker.start()].rstrip(" -_+,&")
-    return base_title(value).strip(" -_+,&")
+    if marker and marker.start() > 0 and edit_suffix(value[marker.start():]):
+        value = value[:marker.start()].rstrip(" -_+,&|/")
+    return base_title(value).strip(" -_+,&|/")
 
 
 
@@ -33,7 +39,7 @@ def clean_search_text(value):
     """Normalize decorative Unicode, not arbitrary words that might be a title."""
     value = unicodedata.normalize("NFKC", value)
     value = re.sub(r"\.(?:mp3|wav|flac)$", "", value, flags=re.I)
-    value = re.sub(r"[^\w\s'’()\[\]{}&+.,:–—-]", " ", value)
+    value = re.sub(r"[^\w\s'’()\[\]{}&+.,:–—|/-]", " ", value)
     return " ".join(value.split()).strip(" -–—")
 
 
@@ -72,8 +78,8 @@ def search_candidates(track):
     }
     candidates.append(search_identity(cleaned))
 
-    split = re.split(r"\s+[-–—]\s+", cleaned["title"], maxsplit=1)
-    if len(split) == 2 and (primary["edited"] or track.get("source") == "SoundCloud"):
+    split = re.split(SEPARATOR, cleaned["title"], maxsplit=1)
+    if len(split) == 2 and not edit_suffix(split[1]) and (primary["edited"] or track.get("source") == "SoundCloud"):
         candidates.append({"title": catalog_text(split[0]), "artist": catalog_text(split[1]), "duration": None})
     # Uploader names are not reliable artist identifiers. Title-only fallback
     # remains explicitly unverified if audio cannot establish identity.
@@ -95,13 +101,16 @@ def search_identity(track):
     title, artist = clean_search_text(track["title"]), clean_search_text(track.get("artist", ""))
     edited = bool(EDIT.search(title))
     # Uploader != performer is common on SoundCloud. Keep the raw title in the UI.
-    split = re.split(r"\s+[-–—]\s+", title, maxsplit=1)
+    split = re.split(SEPARATOR, title, maxsplit=1)
     if (
         len(split) == 2
         and not track.get("manual")
         and (edited or not artist or track.get("source") == "SoundCloud")
     ):
-        artist, title = split
+        if edit_suffix(split[1]):
+            title = split[0]
+        else:
+            artist, title = split
     title = catalog_text(title) if not track.get("manual") else base_title(title)
     artist = catalog_text(artist) if not track.get("manual") else artist
     return {

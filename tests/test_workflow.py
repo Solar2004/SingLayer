@@ -240,3 +240,20 @@ async def test_confirmed_recording_survives_missing_lyrics():
     assert result["recognized"]["recording_id"] == "123"
     assert result["evidence"]["recognition_confirmed"]
     assert "document" not in result
+
+
+@pytest.mark.parametrize("title,expected", [
+    ("mr kitty | after dark | slowed + reverbed", ("after dark", "mr kitty")),
+    ("Honeypie - bass boosted", ("Honeypie", "")),
+    ("After Dark [8D Audio]", ("After Dark", "")),
+    ("NIGHT DANCER (0.8x)", ("NIGHT DANCER", "")),
+    ("Artist - Song slowed to perfection", ("Song", "Artist")),
+    ("after dark slowed reverb // tiktok version", ("after dark", "")),
+])
+def test_additional_real_world_edit_notations(title, expected):
+    track = {"title": title, "artist": "Uploader", "source": "SoundCloud", "duration": 300}
+    candidates = search_candidates(track)
+    assert any(tuple(value.casefold() for value in (c["title"], c["artist"])) ==
+               tuple(value.casefold() for value in expected) for c in candidates)
+    assert search_identity(track)["edited"]
+    assert all(c.get("duration") is None for c in candidates)

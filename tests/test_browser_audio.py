@@ -36,3 +36,37 @@ def test_artwork_rejects_private_arbitrary_and_credential_urls():
 def test_real_pactl_monitor_source_key():
     sinks = [{"index": 1, "monitor_source": "alsa_output.example.monitor"}]
     assert select_stream([stream(7, "Brave")], sinks) == {"index": 7, "device": "alsa_output.example.monitor"}
+
+
+def native_node(serial, name="Brave", media_class="Stream/Output/Audio", state="running", mute=False):
+    return {"type": "PipeWire:Interface:Node", "info": {"state": state,
+            "props": {"object.serial": serial, "application.name": name, "media.class": media_class},
+            "params": {"Props": [{"mute": mute}]}}}
+
+
+def test_native_pipewire_captures_browser_only_with_no_device_fallback():
+    from singlayer.browser_audio import capture_command, select_pipewire_stream
+
+    target = select_pipewire_stream([native_node(12157), native_node(42, media_class="Audio/Source")])
+    assert target == {"backend": "pipewire", "serial": 12157}
+    command = capture_command(target)
+    assert command[0] == "pw-record"
+    assert command[command.index("--target") + 1] == "12157"
+    properties = command[command.index("--properties") + 1]
+    assert "node.dont-fallback=true" in properties
+    assert "node.dont-reconnect=true" in properties
+    assert select_pipewire_stream([native_node(1), native_node(2, "Firefox")]) is None
+    assert select_pipewire_stream([native_node(1, state="idle")]) is None
+    assert select_pipewire_stream([native_node(1, mute=True)]) is None
+    assert select_pipewire_stream([native_node(1, media_class="Audio/Source")]) is None
+
+
+def test_explicit_browser_disambiguates_but_never_mix_two_brave_streams():
+    from singlayer.browser_audio import select_pipewire_stream
+
+    objects = [native_node(1), native_node(2, "Vivaldi"), native_node(3, "Chromium")]
+    assert select_pipewire_stream(objects) is None
+    assert select_pipewire_stream(objects, browser="Brave") == {"backend": "pipewire", "serial": 1}
+    assert select_pipewire_stream([native_node(1), native_node(2)], browser="Brave") is None
+    sinks = [{"index": 1, "monitor_source_name": "speaker.monitor"}]
+    assert select_stream([stream(1, "Brave"), stream(2, "Vivaldi")], sinks, browser="Brave")["index"] == 1

@@ -10,7 +10,7 @@ from array import array
 
 import aiohttp
 
-from .browser_audio import capture_args
+from .browser_audio import capture_command
 from .transcription import transcribe_window
 
 RATE = 16000
@@ -107,7 +107,7 @@ async def _run_live(data, emit):
         anchor = await status()
         started = time.monotonic()
         process = await asyncio.create_subprocess_exec(
-            "parec", *capture_args(target), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+            *capture_command(target), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )
         pending = asyncio.Queue(maxsize=1)
 

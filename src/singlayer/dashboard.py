@@ -216,9 +216,9 @@ class Dashboard(QWidget):
             self.browser.addItem(QIcon.fromTheme(icon), name)
         self.browser.setCurrentText(self.settings.value("browser-label", "Auto"))
         self.browser.setToolTip(
-            "Chromium no distingue Brave/Chrome/Vivaldi. Selecciona el icono del navegador que usas."
+            "Navegador del que se captura audio. Auto rechaza varios flujos ambiguos; elige Brave, Chrome u otro para aislarlo."
         )
-        self.browser.currentTextChanged.connect(lambda name: self.settings.setValue("browser-label", name))
+        self.browser.currentTextChanged.connect(self.browser_changed)
         self.browser.hide()
         self.browser_badge = QLabel()
         self.browser_badge.setFixedSize(22, 22)
@@ -503,6 +503,23 @@ class Dashboard(QWidget):
         if self.missing_engines:
             self.install_engines()
 
+    def audio_environment(self):
+        env = QProcessEnvironment.systemEnvironment()
+        env.insert("SINGLAYER_BROWSER", self.browser.currentText())
+        return env
+
+    def browser_changed(self, name):
+        self.settings.setValue("browser-label", name)
+        self.browser_badge.setPixmap(self.browser.itemIcon(self.browser.currentIndex()).pixmap(20, 20))
+        self.cancel_job()
+        self.stop_live()
+        terminate(self.audio_probe)
+        self.meter.stop()
+        self.audio_target = None
+        self.probe_audio()
+        if self.wanted and self.track:
+            self.search()
+
     def probe_audio(self):
         if not self.wanted or not self.track or not self.track.get("playing") or self.track.get("stale"):
             if self.audio_target:
@@ -511,6 +528,7 @@ class Dashboard(QWidget):
             return
         if self.audio_probe.state() != QProcess.ProcessState.NotRunning:
             return
+        self.audio_probe.setProcessEnvironment(self.audio_environment())
         self.audio_probe.start(sys.executable, ["-m", "singlayer.worker", "audio-target"])
         self.audio_probe.write(json.dumps({"title": self.track["title"]}).encode())
         self.audio_probe.closeWriteChannel()
@@ -931,6 +949,7 @@ class Dashboard(QWidget):
         process.errorOccurred.connect(failed)
         payload = json.dumps({"track": dict(self.track)}).encode()
         process.started.connect(lambda: (process.write(payload), process.closeWriteChannel()))
+        process.setProcessEnvironment(self.audio_environment())
         process.start(sys.executable, ["-m", "singlayer.worker", "live"])
 
     def search(self, recognize=False, override=None):
@@ -1011,6 +1030,7 @@ class Dashboard(QWidget):
         process.started.connect(
             lambda: (process.write(json.dumps(data).encode()), process.closeWriteChannel())
         )
+        process.setProcessEnvironment(self.audio_environment())
         process.start(sys.executable, ["-m", "singlayer.worker", "resolve"])
         QTimer.singleShot(240_000, lambda: self.timeout_job(epoch))
 

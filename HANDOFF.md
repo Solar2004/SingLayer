@@ -7,9 +7,18 @@ antes de docs/REQUESTS.md o documentación histórica. No se necesita la convers
 
 Esta sección sustituye los bloqueos históricos descritos más abajo.
 
+Última ampliación: captura nativa PipeWire con pw-record por object.serial y sin
+fallback; selector de navegador aplicado a probe/resolución/live. Brave se probó
+con enlace de grafo exclusivo. Normalización ampliada a pipes, bass boosted, 8D,
+0.8x, slowed to perfection y TikTok. Diez muestras reales: Shazam 10/10 identidad
+correcta, Crisper small CPU desigual, alineación automática 0/10. Ver
+docs/MUSIC_VALIDATION.md antes de afirmar que todas las variantes están listas.
+Panel reiniciado con Brave seleccionado. Última inspección: Brave silenciado a
+nivel PipeWire; correctamente se rechaza esa captura. No se cambió su volumen.
+
 - Push completado. d7ccb42 y ab5b399 publicados y verificados en origin/main;
   las correcciones de esta validación se publican en un commit posterior.
-- **109 pruebas completas pasan, cero exclusiones**; Ruff, shell y diff check OK.
+- **118 pruebas completas pasan, cero exclusiones**; Ruff, shell y diff check OK.
 - Panel, bridge y Kotonoha arrancaron en el escritorio real; WNP Brave/SoundCloud
   envió pista, portada URL y reloj. No se capturó screenshot del compositor.
 - ShazamIO Python 3.12 probado con audio real: Honeypie (Slowed + Bass Boosted)

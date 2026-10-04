@@ -7,7 +7,7 @@ from PyQt6.QtCore import QProcess, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import QWidget
 
-from .browser_audio import capture_args
+from .browser_audio import capture_command
 
 
 def spectrum(pcm, bands=32):
@@ -47,10 +47,11 @@ class AudioMeter(QWidget):
             return
         if self.process.state() != QProcess.ProcessState.NotRunning:
             return
-        if not shutil.which("parec"):
-            self.failure.emit("Falta parec (pulseaudio-utils / libpulse)")
+        command = capture_command(target)
+        if not shutil.which(command[0]):
+            self.failure.emit(f"Falta el motor de captura: {command[0]}")
             return
-        self.process.start("parec", capture_args(target))
+        self.process.start(command[0], command[1:])
 
     def read(self):
         self.pcm.extend(bytes(self.process.readAllStandardOutput()))

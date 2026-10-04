@@ -2,7 +2,7 @@
 
 ## Verified
 
-- 109 full tests pass, no exclusions; Ruff, shell syntax and diff checks pass.
+- 118 full tests pass, no exclusions; Ruff, shell syntax and diff checks pass.
 - Real desktop panel, bridge and Kotonoha launch; Brave WebNowPlaying connects.
 - Browser stream capture and ShazamIO work. Honeypie slowed/bass edition produced
   3/3 matching recognitions; Coldplay was also recognized during autoplay.
@@ -18,12 +18,18 @@
   8.56s inference. The existing100ms boundary tolerance handles a20ms final edge.
 - Desktop launcher already points to `.venv/bin/singlayer app`. Panel left open.
 
+- Native PipeWire capture now works when pactl cannot see the stream. Browser choice
+  isolates Brave from other browser playback; muted or ambiguous streams are rejected.
+- Metadata regression coverage includes pipes, bass boosted, 8D, numeric speed,
+  slowed to perfection and TikTok suffixes.
+
 ## Still required before claiming everything is finished
 
 - Repeat corrected Honeypie flow from the start without autoplay changing track.
-- Validate actual singing transcription and edited-song alignment with the newly
-  installed Crisper model. CPU produces delayed observed words; it cannot provide
-  future lyrics on the first playback. Voice baseline is not music accuracy proof.
+- Actual singing matrix now exists (docs/MUSIC_VALIDATION.md). Small CPU recognizes
+  some English/Japanese words but returns empty or inaccurate fragments on others;
+  automatic edited-song alignment remains unproven. Repeated choruses stay ambiguous.
+  CPU produces delayed observed words; it cannot provide future lyrics on first playback.
 - CrisperWhisper GPU: Vulkan detects RX590, but original C++ source returns404.
   No compiled/verified AMD backend exists yet; CPU is clearly labelled as CPU.
 - Inspect compositor blur and final visual behavior on real Wayland/X11. Offscreen

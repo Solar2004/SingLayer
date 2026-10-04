@@ -3,6 +3,10 @@
 Actualizado: 2026-10-04 (validación completa y runtime instalado). Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
+## Visor de letras — última corrección
+
+216 pruebas pasan. Si Kotonoha ya está abierto, el lanzamiento adicional termina con código0 y aviso de instancia existente. Antes `overlay_finished` cortaba la conexión con ese visor; ahora conserva documento/reloj y reconecta al receptor existente. Fallos reales y desactivación explícita siguen cerrando el enlace. Regresión observada fallar antes del cambio y pasar después. Panel reiniciado, conexión TCP establecida con visor existente en28746. Preferencia actual del usuario: CrisperWhisper CPU, conservada.
+
 ## Motor optimizado — última entrega
 
 213 pruebas pasan. Perfil `reuse-language-encoder-v1` compilado, instalado y validado en RX590 Vulkan. Cinco fragmentos musicales pareados:12→8s con segmentos/texto/tiempos idénticos; inglés, japonés y francés. Pista SoundCloud completa sin caché:150,016→102,076s, primeras letras19,750→16,750s,177,34s/11ventanas. Las ejecuciones completas producen42/43líneas: no afirmar igualdad completa ni exactitud humana. Cache0,2029s. Instalador restaura fuente fijada y valida hashes de biblioteca/parche. Ver [ENCODER_REUSE.md](docs/ENCODER_REUSE.md).

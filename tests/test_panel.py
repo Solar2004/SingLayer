@@ -540,3 +540,33 @@ def test_full_track_without_catalog_prefers_installed_gpu_unless_cpu_selected(pa
     panel.engine_preference = preference
     panel.analyze_full_track('https://soundcloud.com/singer/song')
     assert called == [expected]
+
+
+def test_existing_overlay_keeps_lyrics_connection(panel):
+    panel.wanted = True
+    panel.link.enabled = True
+    panel.link.track = TRACK
+    existing_document = {"lines": []}
+    panel.link.document = existing_document
+    process = SimpleNamespace(readAllStandardOutput=lambda: b"Kotonoha is already running; exiting.\n")
+    panel.process_logs(process, "Overlay")
+    panel.overlay_finished(0, None)
+    assert panel.link.enabled
+    assert panel.link.track == TRACK
+    assert panel.link.document is existing_document
+
+
+def test_overlay_failure_does_not_keep_connection(panel):
+    panel.wanted = True
+    panel.link.enabled = True
+    panel.overlay_finished(1, None)
+    assert not panel.link.enabled
+
+
+def test_disabled_overlay_does_not_reconnect_existing_instance(panel):
+    panel.wanted = True
+    panel.overlay_button.setChecked(False)
+    process = SimpleNamespace(readAllStandardOutput=lambda: b"Kotonoha is already running; exiting.\n")
+    panel.process_logs(process, "Overlay")
+    panel.overlay_finished(0, None)
+    assert not panel.link.enabled

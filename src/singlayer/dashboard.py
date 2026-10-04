@@ -122,6 +122,7 @@ class Dashboard(QWidget):
         self.crisper.setStandardErrorFile(str(ROOT / ".build/crisper-server.log"))
         self.plain = self.bridge_error = ""
         self.wanted = self.online = self.pending = self.overlay_attempted = False
+        self.overlay_existing = False
         self.cover_revision = None
         self.cover_attempts = {}
         self.job_epoch = 0
@@ -834,6 +835,7 @@ class Dashboard(QWidget):
         if not self.wanted or not self.overlay_button.isChecked() or self.overlay_attempted:
             return
         self.overlay_attempted = True
+        self.overlay_existing = False
         try:
             env = QProcessEnvironment()
             for key, value in managed_environment().items():
@@ -1731,6 +1733,9 @@ class Dashboard(QWidget):
 
     def process_logs(self, process, name):
         message = bytes(process.readAllStandardOutput()).decode(errors="replace")
+        if name == "Overlay" and "Kotonoha is already running" in message:
+            self.overlay_existing = True
+            return
         if (
             "Error" in message
             or "not permitted" in message
@@ -1741,6 +1746,12 @@ class Dashboard(QWidget):
             self.activity.setText(self.bridge_error)
 
     def overlay_finished(self, code, status):
+        if code == 0 and self.overlay_existing and self.wanted and self.overlay_button.isChecked():
+            # The single-instance launcher exited, not the existing receiver.
+            self.link.enabled = True
+            self.link.reconnect()
+            self.activity.setText("Conectando con el visor de letras abierto")
+            return
         self.link.stop()
         if self.wanted and self.overlay_button.isChecked():
             self.activity.setText(

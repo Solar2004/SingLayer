@@ -90,6 +90,7 @@ async def _run_live(data, emit):
                     raise PlaybackChanged()
                 return track
 
+        emit({"live_progress": "preparing"})
         for _ in range(60):
             try:
                 async with session.get("http://127.0.0.1:28748/health", allow_redirects=False) as response:
@@ -115,6 +116,7 @@ async def _run_live(data, emit):
             *capture_command(target), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )
         pending = asyncio.Queue(maxsize=1)
+        inferring_since = None
 
         async def capture():
             buffer = bytearray()
@@ -123,6 +125,8 @@ async def _run_live(data, emit):
                 chunk = await asyncio.wait_for(process.stdout.readexactly(RATE * 2), 3)
                 buffer.extend(chunk)
                 samples += RATE
+                if inferring_since is None:
+                    emit({"live_progress": "capture", "captured": min(len(buffer) / (RATE * 2), window), "total": window})
                 if len(buffer) >= window * RATE * 2:
                     pcm = bytes(buffer[:window * RATE * 2])
                     begin = anchor["position"] + samples / RATE - window
@@ -146,15 +150,21 @@ async def _run_live(data, emit):
                     raise PlaybackChanged()
                 previous, observed = current, now
                 checks += 1
+                if inferring_since is not None and checks % 3 == 0:
+                    emit({"live_progress": "transcribing", "elapsed": now - inferring_since})
                 if checks % 5 == 0 and await audio_target(current["title"]) != target:
                     raise PlaybackChanged()
 
         async def infer():
+            nonlocal inferring_since
+
             while True:
                 pcm, begin = await pending.get()
                 if not audible(pcm):
                     emit({"no_words": True, "live_status": "Esperando voz · audio en silencio"})
                     continue
+                inferring_since = time.monotonic()
+                emit({"live_progress": "transcribing", "elapsed": 0})
                 try:
                     document = await transcribe_window(wav_window(pcm), begin)
                 except ValueError:
@@ -162,6 +172,8 @@ async def _run_live(data, emit):
                     # Keep the transport strict; discard this window and recover.
                     emit({"live_status": "Fragmento incierto descartado · esperando el siguiente"})
                     continue
+                finally:
+                    inferring_since = None
                 current = await status()
                 if not continuous(anchor, current, time.monotonic() - started):
                     raise PlaybackChanged()

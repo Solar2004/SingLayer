@@ -1,6 +1,6 @@
 # Activar el análisis automático de SingLayer
 
-La aplicación ya está preparada. Falta cargar **una vez** la extensión «SingLayer — enlace automático» en Brave; WebNowPlaying sigue siendo necesario para el reloj y los controles.
+La conexión se confirmó funcionando en la sesión SoundCloud del usuario después de reiniciar el puente antiguo. Para una instalación nueva, carga **una vez** la extensión «SingLayer — enlace automático» en Brave; WebNowPlaying sigue siendo necesario para el reloj y los controles.
 
 1. En Brave, abre el menú **Extensiones → Gestionar extensiones**.
 2. Activa **Modo desarrollador** y pulsa **Cargar descomprimida**.
@@ -20,6 +20,7 @@ SingLayer espera un enlace estable y que coincidan título y duración con la pi
 
 ## Verificación
 
-- 200 pruebas Python pasan; 4 comprobaciones de extracción JavaScript pasan; Ruff, sintaxis JS/shell y diff check pasan.
+- 202 pruebas Python pasan; 4 comprobaciones de extracción JavaScript pasan; Ruff, sintaxis JS/shell y diff check pasan.
 - El disparo automático del panel se ejercitó con el resultado acústico real de SoundCloud guardado: 42 líneas aceptadas por el panel y el protocolo del overlay.
-- La extensión aún **no está instalada en Brave**: la herramienta bloqueó abrir la página de extensiones por su política de URLs. No se ha probado todavía la conexión de esta extensión instalada en tu navegador. El único paso pendiente es cargarla y recargar la pestaña.
+- Conexión real de la extensión confirmada en Brave/SoundCloud: URL, título y duración coinciden con la pista activa. YouTube mantiene pruebas de extracción/componentes; no se ha confirmado aquí la extensión instalada en una sesión YouTube.
+- El enlace confirmado tiene prioridad sobre una búsqueda de catálogo pendiente, para evitar esperas largas antes de descargar. La barra distingue captura con segundos restantes e inferencia sin porcentaje inventado.

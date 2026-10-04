@@ -3,9 +3,13 @@
 Actualizado: 2026-10-04 (validación completa y runtime instalado). Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
-## Enlace automático — última entrega
+## Progreso y espera — última entrega
 
-Implementado puente local de URL con extensión propia para SoundCloud/YouTube y disparo automático por pista. 200 pruebas Python y4 checks JS pasan. Disparo Qt real con caché acústica:42 líneas/overlay full-audio. Extensión preparada en ~/.local/share/singlayer/source-link; **falta que el usuario la cargue en Brave**, porque la herramienta bloqueó navegar a su página de extensiones. No confundir prueba de componentes con extensión instalada. Ver [AUTOMATIC_SOURCE.md](docs/AUTOMATIC_SOURCE.md).
+202 pruebas pasan. La barra muestra segundos capturados/restantes y espera indeterminada durante inferencia, con segundos de análisis. El panel explica las frases ya transcritas que no corresponden al segundo actual. El enlace exacto confirmado inicia análisis completo sin esperar toda la búsqueda del catálogo; cancela esa búsqueda pendiente y aprovecha el catálogo solo si ya está disponible. Reiniciado puente antiguo que no exponía URL. Extensión **confirmada funcionando en SoundCloud**: entrega enlace de Moi… Lolita slowed/reverb en la pista activa. La transcripción en vivo sigue sin anticipar voz futura.
+
+## Enlace automático — entrega anterior
+
+Implementado puente local de URL con extensión propia para SoundCloud/YouTube y disparo automático por pista. 202 pruebas Python y4 checks JS pasan. Disparo Qt real con caché acústica:42 líneas/overlay full-audio. Extensión preparada en ~/.local/share/singlayer/source-link; **falta que el usuario la cargue en Brave**, porque la herramienta bloqueó navegar a su página de extensiones. No confundir prueba de componentes con extensión instalada. Ver [AUTOMATIC_SOURCE.md](docs/AUTOMATIC_SOURCE.md).
 
 ## Pista completa — entrega anterior
 
@@ -24,7 +28,7 @@ Esta sección reemplaza las restricciones y decisiones históricas inferiores.
 El usuario autorizó un motor alternativo probado para canciones y pidió una línea
 de tiempo automática por segundos/duración.
 
-- **200 pruebas completas pasan**, Ruff, shell y diff check OK.
+- **202 pruebas completas pasan**, Ruff, shell y diff check OK.
 - **Whisper.cpp large-v3-turbo Q5_0 instalado y seleccionado en RX590 Vulkan**.
   API real/DTW validado, SHA256 y revisiones fijadas. Crisper small CPU conservado;
   `SINGLAYER_ENGINE=crisper` lo selecciona. GPU de Crisper sigue sin fuente original

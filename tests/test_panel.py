@@ -463,7 +463,7 @@ def test_automatic_full_track_only_once_with_ready_exact_url(panel, monkeypatch)
     assert calls == [panel.track['url']]
 
 
-def test_automatic_full_track_waits_for_current_playback_and_search(panel, monkeypatch):
+def test_automatic_full_track_waits_for_playback_but_not_catalog_search(panel, monkeypatch):
     import time
 
     calls = []
@@ -475,9 +475,37 @@ def test_automatic_full_track_waits_for_current_playback_and_search(panel, monke
         panel.track = {**TRACK, 'url': 'https://soundcloud.com/singer/song', **patch}
         panel.maybe_full_track()
     panel.track = {**TRACK, 'url': 'https://soundcloud.com/singer/song'}
-    panel.job = object()
-    panel.maybe_full_track()
-    panel.job = None
     panel.track_seen_at = time.monotonic()
     panel.maybe_full_track()
     assert calls == []
+    panel.track_seen_at = time.monotonic()-4
+    panel.job = object()
+    panel.maybe_full_track()
+    panel.job = None
+    assert calls == [panel.track["url"]]
+
+
+def test_capture_progress_and_inference_wait_are_distinct(panel):
+    panel.update_live_progress({'live_progress': 'capture', 'captured': 7, 'total': 24})
+    assert panel.progress.maximum() == 24
+    assert panel.progress.value() == 7
+    assert '17 s' in panel.activity.text()
+    panel.update_live_progress({'live_progress': 'transcribing', 'elapsed': 6.8})
+    assert panel.progress.maximum() == 0
+    assert '6 s de análisis' in panel.activity.text()
+    assert 'faltan' not in panel.activity.text()
+
+
+def test_delayed_transcript_explains_empty_current_lyrics(panel):
+    panel.lyric_source = 'transcript'
+    panel.track = {**TRACK, 'position': 40}
+    panel.observed_document = {'source': 'audio-transcript', 'lines': [
+        {'text': 'Past measured phrase', 'start': 5, 'end': 9, 'words': [], 'translation': ''}]}
+    panel.publish()
+    assert panel.lyric_preview.text() == ''
+    assert '1 frase' in panel.transcription_hint.text()
+    assert 'este segundo' in panel.transcription_hint.text()
+    panel.track = {**panel.track, 'position': 6}
+    panel.publish()
+    assert panel.lyric_preview.text() == 'Past measured phrase'
+    assert panel.transcription_hint.text() == ''

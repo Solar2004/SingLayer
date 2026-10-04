@@ -207,6 +207,8 @@ class Dashboard(QWidget):
             QLineEdit, QDoubleSpinBox { background: #303032; border: 1px solid #555555; border-radius: 5px; padding: 6px; }
             QProgressBar { background: #414143; border: none; border-radius: 2px; max-height: 4px; }
             QProgressBar::chunk { background: #dddddd; border-radius: 2px; }
+            QProgressBar#analysisProgress { min-height: 20px; max-height: 20px; text-align: center; color: #ffffff; }
+            QProgressBar#analysisProgress::chunk { background: #535354; }
             QDialog, QMessageBox { background: #242426; }
             QCheckBox { padding: 5px 0; }
             QComboBox QAbstractItemView { background: #303032; color: #eeeeee; }
@@ -295,6 +297,9 @@ class Dashboard(QWidget):
         self.overlay_button.hide()
         self.lyric_preview = label("", "title")
         right.addWidget(self.lyric_preview, 1)
+        self.transcription_hint = label("", "muted")
+        self.transcription_hint.setWordWrap(True)
+        right.addWidget(self.transcription_hint)
         self.lyric_lines = QListWidget()
         self.lyric_lines.setAccessibleName("Letra completa; doble clic para alinear con la música")
         self.lyric_lines.setWordWrap(True)
@@ -315,6 +320,8 @@ class Dashboard(QWidget):
         self.activity = label("Lista para conectar", "muted")
         right.addWidget(self.activity)
         self.progress = QProgressBar()
+        self.progress.setObjectName("analysisProgress")
+        self.progress.setAccessibleName("Preparación de las letras")
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
@@ -917,6 +924,15 @@ class Dashboard(QWidget):
         if source_document and source_document.get("source") == "full-audio" and current and current["end"] < position:
             current = None
         self.lyric_preview.setText(display_text(current) if current and playback_document else "")
+        measured = (self.observed_document or {}).get("lines", [])
+        hint = ""
+        if not self.lyric_preview.text() and measured and not self.full_completed:
+            count = len(measured)
+            hint = f"{count} {'frase ya transcrita' if count == 1 else 'frases ya transcritas'} · aún sin letra verificada para este segundo. El audio en vivo llega con retraso."
+        elif self.full_job and not self.lyric_preview.text():
+            hint = "Preparando las letras de la pista completa…"
+        self.transcription_hint.setText(hint)
+        self.transcription_hint.setVisible(bool(hint))
         if self._visible_document is not self._adjusted_document:
             self._visible_document = self._adjusted_document
             self.lyric_lines.clear()
@@ -1083,6 +1099,24 @@ class Dashboard(QWidget):
             self.live_document = None
             self.live_retry_at = 0
 
+    def update_live_progress(self, event):
+        stage = event["live_progress"]
+        self.progress.setTextVisible(True)
+        if stage == "capture":
+            total = max(1, int(event["total"]))
+            captured = min(total, max(0, int(event["captured"])))
+            self.progress.setRange(0, total)
+            self.progress.setValue(captured)
+            self.progress.setFormat(f"Audio {captured}/{total} s")
+            self.activity.setText(f"Capturando audio · faltan {total-captured} s de este fragmento")
+        else:
+            self.progress.setRange(0, 0)
+            self.progress.setFormat("")
+            self.activity.setText(
+                f"Transcribiendo fragmento · {int(event.get('elapsed', 0))} s de análisis"
+                if stage == "transcribing" else "Preparando el motor de letras…"
+            )
+
     def start_live(self):
         import time
 
@@ -1115,7 +1149,7 @@ class Dashboard(QWidget):
         self.live_job = process
         epoch = self.live_epoch
         output = bytearray()
-        self.activity.setText(f"Escuchando fragmentos · {engine['label']}")
+        self.update_live_progress({"live_progress": "preparing"})
 
         def consume():
             from .alignment import align_fragment, estimate_clock
@@ -1132,7 +1166,9 @@ class Dashboard(QWidget):
                     continue
                 try:
                     event = json.loads(line)
-                    if "transcript" in event:
+                    if "live_progress" in event:
+                        self.update_live_progress(event)
+                    elif "transcript" in event:
                         doc = event["transcript"]
                         self.observed_document = merge_transcript(self.observed_document, doc)
                         if self.document and self.lyric_policy()["route"] == "alignment":
@@ -1157,6 +1193,9 @@ class Dashboard(QWidget):
                             if self.automatic_clock else
                             f"{'Alineación' if doc and doc.get('source') == 'audio-aligned' else 'Transcripción'} estimada · retraso {event['lag']:.1f} s"
                         )
+                        self.progress.setRange(0, 100)
+                        self.progress.setValue(100)
+                        self.progress.setFormat("Fragmento analizado")
                         self.publish()
                     elif event.get("discontinuity"):
                         self.live_document = self.live_cache.get(self.live_cache_key())
@@ -1205,6 +1244,7 @@ class Dashboard(QWidget):
         process.start(sys.executable, ["-m", "singlayer.worker", "live"])
 
     def search(self, recognize=False, override=None):
+        self.progress.setTextVisible(False)
         self.catalog_resolved = False
         self.observed_document = None
         self.clock_anchors = {}
@@ -1388,7 +1428,7 @@ class Dashboard(QWidget):
         track = self.track or {}
         url = track.get("url")
         if (self.lyric_source == "catalog" or not self.wanted or not url or not track.get("playing") or track.get("stale")
-                or self.job or self.full_job or self.full_completed
+                or self.full_job or self.full_completed
                 or time.monotonic() - self.track_seen_at < 3):
             return
         key = (track["id"], url, self.lyric_policy()["engine"])
@@ -1473,6 +1513,9 @@ class Dashboard(QWidget):
                     event = json.loads(line)
                     if "full_progress" in event:
                         self.activity.setText(event["full_progress"])
+                        self.progress.setRange(0, 100)
+                        self.progress.setTextVisible(True)
+                        self.progress.setFormat("Pista completa · %p%")
                         self.progress.setValue(event["percent"])
                     elif "full_result" in event:
                         result = event["full_result"]
@@ -1480,6 +1523,7 @@ class Dashboard(QWidget):
                         self.full_original_document = result.get("raw_document", result["document"])
                         self.full_completed = True
                         self.progress.setValue(100)
+                        self.progress.setFormat("Pista completa lista")
                         self.reading_changed()
                         self.activity.setText("Pista completa analizada · tiempos estimados" if self.full_document else "Pista completa analizada · sin palabras fiables")
                     elif "fatal" in event:

@@ -1,16 +1,23 @@
-name: Connector tests
+name: Tests
 on: [push, pull_request]
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONPATH: upstream/kotonoha/src:src
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.lock
       - run: python -m pip install --no-deps -e .
-      - run: python -m pip install pytest pytest-asyncio
+      - run: python -m pip install pytest pytest-asyncio ruff PyQt6 numpy langid espeakng-loader pykakasi
+      - run: bash -n scripts/install.sh scripts/setup.sh scripts/setup-whisper-vulkan.sh
+      - run: ruff check src tests
       - run: dbus-run-session -- python -m pytest -q

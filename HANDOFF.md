@@ -3,7 +3,11 @@
 Actualizado: 2026-10-04 (validación completa y runtime instalado). Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
-## Visor de letras — última corrección
+## Preparación de versión0.2.0 — última entrega
+
+221 pruebas pasan. Instalador `scripts/install.sh` por HTTPS/curl y etiqueta fija v0.2.0; preflight ejecutables/Python, prefijo absoluto, preservación de directorios/atajos existentes, lanzamiento manual. `--with-whisper` compila y valida GPU; requiere dependencias del sistema. README principal reemplazado para eliminar estados obsoletos. Selector Whisper multilingüe explica detección automática; prueba cirílica valida protocolo/tiempos, no implica benchmark real de canto ruso. CI incluye ahora Qt y fuente Kotonoha para ejecutar tests del panel. Ver [INSTALL.md](docs/INSTALL.md).
+
+## Visor de letras — entrega anterior
 
 216 pruebas pasan. Si Kotonoha ya está abierto, el lanzamiento adicional termina con código0 y aviso de instancia existente. Antes `overlay_finished` cortaba la conexión con ese visor; ahora conserva documento/reloj y reconecta al receptor existente. Fallos reales y desactivación explícita siguen cerrando el enlace. Regresión observada fallar antes del cambio y pasar después. Panel reiniciado, conexión TCP establecida con visor existente en28746. Preferencia actual del usuario: CrisperWhisper CPU, conservada.
 

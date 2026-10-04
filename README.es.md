@@ -5,27 +5,19 @@ WebNowPlaying, Kotonoha, SongRec/ShazamIO y syncedlyrics.
 
 ![Panel real, sin canción conectada](docs/dashboard-preview.png)
 
-## Abrir
+## Instalar y abrir
 
-Si ya tenías SingLayer abierto, cierra la versión anterior (incluido cualquier
-`singlayer start` de una terminal). Abre SingLayer desde el menú de aplicaciones.
-El lanzador existente apunta al mismo código y no necesita reinstalarse.
-
-Para una instalación nueva consulta las dependencias Qt en el [README](README.md):
+Linux con Qt/PyQt6 y dependencias de compilación. Revisa la [guía de instalación](docs/INSTALL.md), incluidos los paquetes del sistema y las extensiones del navegador.
 
 ```sh
-git clone https://github.com/Solar2004/SingLayer.git
-cd SingLayer
-bash scripts/setup.sh --engines
-.venv/bin/singlayer app
+curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/Solar2004/SingLayer/v0.2.0/scripts/install.sh | bash -s -- --with-whisper
 ```
 
-La instalación incluye ShazamIO, syncedlyrics y NumPy por defecto. En instalaciones
-anteriores, el primer inicio prepara los componentes que falten mediante `uv` y
-PyPI, sin botón de instalación ni sudo. Necesita Internet. `pactl` y `parec` son
-dependencias del sistema. SongRec es opcional; sin él se utiliza ShazamIO.
+Abre **SingLayer** desde el menú de aplicaciones. El instalador usa una versión fija y no sobrescribe instalaciones existentes. Para un checkout ya instalado, cierra el panel anterior, actualiza el código y ejecuta `bash scripts/setup.sh` y `bash scripts/setup-whisper-vulkan.sh`.
 
-El motor Vulkan también evita repetir la codificación durante la detección automática del idioma: aproximadamente 29–32% menos tiempo de cálculo en cinco fragmentos reales, conservando texto y tiempos. Ver [pruebas e instalación](docs/ENCODER_REUSE.md).
+En **⋯**, selecciona **Whisper multilingüe · GPU Vulkan**. Detecta automáticamente ruso, español, inglés, francés, japonés y otros idiomas, conservando el texto original. **Solo transcripción del audio** usa esa transcripción; la guía de pronunciación para hispanohablantes se selecciona aparte. El ruso está soportado por el modelo, aunque aún no está medido con una canción real en esta entrega.
+
+La optimización Vulkan redujo unos 12→8 segundos por fragmento y150→102 segundos en una prueba completa. [Mediciones y límites](docs/ENCODER_REUSE.md). CrisperWhisper CPU permanece seleccionable y no aprovecha esa optimización Vulkan.
 
 ## Navegador y controles
 

@@ -53,3 +53,19 @@ def test_cjk_characters_keep_original_joining():
 def test_invalid_word_contract_rejected(words):
     with pytest.raises(ValueError):
         transcript_document({"words": words}, 0, 12)
+
+
+def test_russian_text_and_times_survive_overlay_protocol():
+    from kotonoha.lyrics.protocol import AdapterProtocolDecoder
+
+    from singlayer.overlay_link import snapshot
+
+    doc = transcript_document({"language": "ru", "words": [
+        {"word": "Привет,", "start": 1, "end": 1.5},
+        {"word": "мир!", "start": 1.6, "end": 2.2},
+    ]}, 50, 12)
+    assert doc["lines"][0]["text"] == "Привет, мир!"
+    assert doc["lines"][0]["start"] == 51
+    assert doc["lines"][0]["end"] == 52.2
+    track = {"id": "ru-demo", "title": "Проверка", "position": 51, "playing": True, "duration": 100}
+    AdapterProtocolDecoder().decode(snapshot(track, doc, 1), observed_at=0)

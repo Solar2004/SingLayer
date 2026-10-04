@@ -380,11 +380,15 @@ class Dashboard(QWidget):
         self.lyric_source_picker.currentIndexChanged.connect(self.change_lyric_source)
         self.lyric_source_picker.hide()
         self.engine_picker = QComboBox(self)
-        for title, value in (("Motor automático", "auto"), ("Whisper.cpp · GPU Vulkan", "whisper"),
+        for title, value in (("Motor automático", "auto"), ("Whisper multilingüe · GPU Vulkan", "whisper"),
                              ("CrisperWhisper · CPU", "crisper")):
             self.engine_picker.addItem(title, value)
         self.engine_picker.setCurrentIndex(max(0, self.engine_picker.findData(self.engine_preference)))
         self.engine_picker.currentIndexChanged.connect(self.change_engine)
+        self.engine_picker.setToolTip(
+            "Whisper detecta automáticamente ruso, español, inglés, francés y otros idiomas. "
+            "Conserva el idioma original; la precisión depende de la voz y la mezcla."
+        )
         self.engine_picker.hide()
 
     def change_lyric_source(self, *_):

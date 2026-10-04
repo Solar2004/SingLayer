@@ -247,7 +247,11 @@ async def invoke(action, data, timeout):
 
 
 async def main_async(action, data):
-    if action == "live":
+    if action == "full-track":
+        from .full_track import analyze
+
+        await analyze(data, emit)
+    elif action == "live":
         from .live_transcription import run_live
 
         await run_live(data, emit)

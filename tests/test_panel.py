@@ -432,3 +432,18 @@ def test_ultra_slowed_adjustment_can_reach_real_duration():
     doc = {"lines": [{"text": "Final phrase", "start": 70, "end": 78.8, "words": []}]}
     adjusted = adjusted_document(doc, offset=2, speed=.4, duration=192)
     assert adjusted["lines"][0]["end"] == pytest.approx(192)
+
+
+def test_complete_audio_timing_is_available_for_future_and_seek(panel):
+    panel.lyric_source = 'auto'
+    panel.track = {**TRACK, 'duration': 192, 'position': 175}
+    panel.full_completed = True
+    panel.full_document = {'source': 'full-audio', 'lines': [
+        {'text': 'Earlier measured words', 'start': 5, 'end': 9, 'words': [], 'translation': ''},
+        {'text': 'Late words measured in full audio', 'start': 170, 'end': 180, 'words': [], 'translation': ''}]}
+    panel.publish()
+    assert panel.lyric_preview.text() == 'Late words measured in full audio'
+    assert panel.link.document['lines'][1]['start'] == 170
+    panel.track = {**panel.track, 'position': 6}
+    panel.publish()
+    assert panel.lyric_preview.text() == 'Earlier measured words'

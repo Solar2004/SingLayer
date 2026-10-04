@@ -133,6 +133,10 @@ En **⋯ Ajustes** elige qué mostrar: automático, solo catálogo o solo transc
 acústica. Puedes seleccionar Whisper GPU o CrisperWhisper CPU; las preferencias
 se conservan. La transcripción directa necesita escuchar y llega con retraso.
 
+## Analizar toda la pista
+
+En **⋯ Ajustes → Analizar pista completa desde enlace**, pega el enlace exacto de SoundCloud o YouTube. Descarga y analiza toda esa versión, verifica su duración y prepara los tiempos para seguir la reproducción y los saltos. El audio temporal se elimina; hasta 16 transcripciones se conservan en caché local. Puede tardar varios minutos y los tiempos son estimados. [Pruebas y servicios admitidos](docs/FULL_TRACK.md).
+
 ## Transcripción y versiones editadas
 
 Instala Whisper.cpp Vulkan con `bash scripts/setup-whisper-vulkan.sh`. El panel

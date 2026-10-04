@@ -6,3 +6,4 @@ audioop-lts==0.2.2; python_version >= "3.13"
 espeakng-loader==0.2.4
 langid==1.1.6
 pykakasi==2.3.0
+yt-dlp[default]==2026.8.19

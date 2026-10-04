@@ -3,6 +3,10 @@
 Actualizado: 2026-10-04 (validación completa y runtime instalado). Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
+## Pista completa — última entrega
+
+Análisis desde enlace exacto en ⋯ Ajustes. SoundCloud completo:177,34s/11ventanas/42líneas; YouTube descarga completa:240,21s. Caché local de hasta16 transcripciones; audio temporal eliminado. Ver [FULL_TRACK.md](docs/FULL_TRACK.md) para pruebas, uso y límites. La URL actual de Brave no pudo recuperarse por fallo de la herramienta de navegador.
+
 ## Última prueba musical — 2026-10-04
 
 Siete ventanas reales, cuatro canciones: Shazam6/6; alineación parcial inglesa y
@@ -16,7 +20,7 @@ Esta sección reemplaza las restricciones y decisiones históricas inferiores.
 El usuario autorizó un motor alternativo probado para canciones y pidió una línea
 de tiempo automática por segundos/duración.
 
-- **169 pruebas completas pasan**, Ruff, shell y diff check OK.
+- **188 pruebas completas pasan**, Ruff, shell y diff check OK.
 - **Whisper.cpp large-v3-turbo Q5_0 instalado y seleccionado en RX590 Vulkan**.
   API real/DTW validado, SHA256 y revisiones fijadas. Crisper small CPU conservado;
   `SINGLAYER_ENGINE=crisper` lo selecciona. GPU de Crisper sigue sin fuente original

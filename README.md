@@ -21,7 +21,7 @@ in `requirements-engines.txt` (transitive dependencies not locked yet). `pactl`/
 and native `pw-dump`/`pw-record` capture one selected browser playback stream,
 never the desktop mix or microphone; ambiguous streams are rejected. A browser
 may itself mix tabs into a single stream, so tab isolation is not guaranteed.
-Recognition sends fingerprints to Shazam. No audio is retained.
+Recognition sends fingerprints to Shazam. Captured audio is not retained; full-track analysis temporarily downloads audio as described below.
 
 Optional Spanish-readable pronunciation uses local eSpeak NG dictionaries and
 Japanese romanization. Original and dual views preserve lyric timing. No lyric
@@ -37,6 +37,8 @@ line start/end ranges, duration clipping, replay history and saved corrections. 
 measured limits](docs/CRISPERWHISPER.md). Real catalog tests covered five SoundCloud
 variants; automatic timing on arbitrary remixes is not guaranteed.
 
+Full-track analysis is available in **⋯ → Analizar pista completa desde enlace**. It downloads the exact public upload, checks decoded duration, analyzes the entire timeline locally and removes temporary audio. Up to 16 transcripts remain in the local cache. [Usage, real tests and limits](docs/FULL_TRACK.md).
+
 Latest validation and environment limitations are in [HANDOFF.md](HANDOFF.md).
 See [Spanish usage](README.es.md).
 
@@ -49,7 +51,7 @@ Browser music → synchronized desktop lyrics, by connecting existing projects.
 **Early integration prototype for Linux/KDE.** SoundCloud, Spotify Web and YouTube
 are handled by the existing WebNowPlaying extension. Kotonoha handles the entire
 lyrics overlay, search, cache and karaoke rendering. SingLayer is the small bridge
-between them. It does not download music or replace your player.
+between them. That original mode does not download music or replace your player. The current panel also provides optional full-track analysis.
 
 [Español](README.es.md) · [Upstream licenses](THIRD_PARTY.md) · [Validation](docs/VALIDATION.md)
 

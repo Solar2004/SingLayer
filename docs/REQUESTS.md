@@ -9,7 +9,7 @@ referencias acústicas únicas, vista de inicio/final, recorte por duración,
 calibración manual persistida, caché de tramos y pronunciación local.
 
 Estado y evidencia: [AUTOMATIC_TIMING.md](AUTOMATIC_TIMING.md).
-Handoff canónico: [HANDOFF.md](../HANDOFF.md). 169 pruebas completas pasan.
+Handoff canónico: [HANDOFF.md](../HANDOFF.md). 188 pruebas completas pasan.
 
 Las muestras muy distorsionadas aún pueden necesitar ajuste manual. No se afirma
 precisión perfecta para todas las variantes ni tiempos exactos por palabra DTW.

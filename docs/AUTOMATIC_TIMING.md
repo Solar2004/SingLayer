@@ -4,6 +4,10 @@ SingLayer construye una línea de tiempo con inicio y final de cada frase. La vi
 **≡** muestra esos segundos y sigue el reloj del navegador. Los tiempos se limitan
 a la duración real de la canción; un ajuste de letras nunca cambia el reproductor.
 
+## Analizar la versión completa
+
+La alternativa a esperar la captura en vivo es **⋯ Ajustes → Analizar pista completa desde enlace**. Usa toda la versión exacta, incluidos el final y los cambios de orden, sin extrapolar la duración del catálogo original. Ver [FULL_TRACK.md](FULL_TRACK.md): pruebas completas de SoundCloud, descarga de YouTube, caché y límites.
+
 ## Cómo se calcula
 
 1. Captura exclusivamente el navegador seleccionado (PulseAudio o PipeWire).

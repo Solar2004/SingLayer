@@ -39,6 +39,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -103,6 +104,10 @@ class Dashboard(QWidget):
         self.active_engine_preference = None
         self.track = self.document = self.job = self.cover_reply = self.blur = None
         self.live_job = None
+        self.full_job = None
+        self.full_document = None
+        self.full_original_document = None
+        self.full_completed = False
         self.live_epoch = 0
         self.live_enabled = False
         self.live_retry_at = 0
@@ -382,6 +387,9 @@ class Dashboard(QWidget):
         self.start_live()
 
     def change_engine(self, *_):
+        self.cancel_full_track()
+        self.full_completed = False
+        self.full_document = self.full_original_document = None
         self.engine_preference = self.engine_picker.currentData()
         self.settings.setValue("transcription_engine", self.engine_preference)
         self.stop_live(reset=True)
@@ -405,7 +413,14 @@ class Dashboard(QWidget):
     def show_settings(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("Ajustes")
-        layout = QVBoxLayout(dialog)
+        dialog.resize(680, 620)
+        outer = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        body = QWidget(scroll)
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        layout = QVBoxLayout(body)
         layout.addWidget(label("Qué letra mostrar", "muted"))
         layout.addWidget(self.lyric_source_picker)
         self.lyric_source_picker.show()
@@ -414,6 +429,8 @@ class Dashboard(QWidget):
         self.engine_picker.show()
         layout.addWidget(label("La transcripción necesita escuchar audio y llega con retraso. No anticipa las frases futuras.", "muted"))
         layout.addWidget(label("Corrección manual, solo si hace falta", "muted"))
+        self.button("Analizar pista completa desde enlace", self.full_track_dialog, layout)
+        self.button("Cancelar análisis completo", self.cancel_full_track, layout)
         self.button("Buscar otra canción", self.manual_search, layout)
         self.button("Elegir otra versión de la letra", self.choose_version, layout)
         self.button("Alinear la letra", self.show_lines, layout)
@@ -667,6 +684,10 @@ class Dashboard(QWidget):
         track = data.get("track")
         identity, previous = track.get("id") if track else None, self.track.get("id") if self.track else None
         if identity != previous:
+            self.cancel_full_track()
+            self.full_document = None
+            self.full_original_document = None
+            self.full_completed = False
             self.stop_live(reset=True)
             self.observed_document = None
             self.clock_anchors = {}
@@ -824,6 +845,8 @@ class Dashboard(QWidget):
                             bool(self.document) if self.catalog_resolved else None)
 
     def display_document(self):
+        if self.full_completed and self.lyric_source != "catalog":
+            return self.full_original_document if self.lyric_policy()["route"] == "transcript" else self.full_document
         if self.lyric_policy()["route"] == "transcript":
             return self.observed_document
         if self.lyric_source == "catalog":
@@ -843,7 +866,9 @@ class Dashboard(QWidget):
     def publish(self, *_):
         adjustment = self.offset.value(), self.speed.value()
         source_document = self.display_document()
-        if self.lyric_policy()["route"] == "alignment" and self.automatic_clock and self.document:
+        if self.full_completed and self.lyric_source != "catalog":
+            adjustment = (0, 1)
+        elif self.lyric_policy()["route"] == "alignment" and self.automatic_clock and self.document:
             source_document = {**self.document, "source": "audio-clock",
                                "sourceName": "Reloj estimado automáticamente · tres referencias o más"}
             adjustment = self.automatic_clock["offset"], self.automatic_clock["speed"]
@@ -864,7 +889,7 @@ class Dashboard(QWidget):
         # A catalog remains available in the list, but automatic playback must
         # not present an unverified catalog as words actually heard in the audio.
         playback_document = self._adjusted_document
-        if self.lyric_policy()["route"] == "alignment" and not self.automatic_clock:
+        if not self.full_completed and self.lyric_policy()["route"] == "alignment" and not self.automatic_clock:
             if source_document is not self.live_document or not self.live_document:
                 playback_document = None
             elif self.live_document.get("source") != "audio-aligned":
@@ -881,6 +906,8 @@ class Dashboard(QWidget):
 
         catalog_pending = (self.lyric_source == "auto" and source_document is self.document
                            and not self.automatic_clock and adjustment == (0, 1))
+        if source_document and source_document.get("source") == "full-audio" and current and current["end"] < position:
+            current = None
         self.lyric_preview.setText(display_text(current) if current and playback_document else "")
         if self._visible_document is not self._adjusted_document:
             self._visible_document = self._adjusted_document
@@ -1051,7 +1078,7 @@ class Dashboard(QWidget):
     def start_live(self):
         import time
 
-        if (not self.live_enabled or not self.wanted or self.live_job or not self.track
+        if (self.full_job or self.full_completed or not self.live_enabled or not self.wanted or self.live_job or not self.track
                 or not self.track.get("playing") or self.track.get("stale")
                 or time.monotonic() < self.live_retry_at):
             return
@@ -1347,6 +1374,114 @@ class Dashboard(QWidget):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
 
+    def full_track_dialog(self):
+        if not self.track:
+            self.activity.setText("Abre la pista en el navegador para asociar sus tiempos")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Analizar la pista completa")
+        form = QFormLayout(dialog)
+        url = QLineEdit(self.settings.value("full-track-url", ""))
+        url.setPlaceholderText("https://soundcloud.com/… o https://youtube.com/watch?v=…")
+        form.addRow("Enlace de esta versión", url)
+        form.addRow(label("Descarga la pista completa y calcula los tiempos localmente. Puede tardar varios minutos. El audio temporal se elimina.", "muted"))
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.analyze_full_track(url.text())
+
+    def cancel_full_track(self):
+        process, self.full_job = self.full_job, None
+        if process:
+            self.retiring_jobs.add(process)
+            process.terminate()
+            QTimer.singleShot(3800, lambda: process.kill() if process in self.retiring_jobs else None)
+
+    def analyze_full_track(self, url):
+        from .full_track import valid_url
+        from .transcriber_runtime import selected_engine
+
+        if not self.track:
+            return
+        try:
+            url = valid_url(url)
+            preference = self.lyric_policy()["engine"]
+            engine = selected_engine(preference)
+            if engine.get("ready") is False:
+                raise ValueError("Instala el motor antes de analizar la pista")
+        except (ValueError, KeyError, OSError) as error:
+            self.activity.setText(str(error))
+            return
+        self.cancel_full_track()
+        self.cancel_job()
+        self.stop_live()
+        self.full_completed = False
+        self.full_document = self.full_original_document = None
+        self.automatic_clock = None
+        if self.crisper.state() != QProcess.ProcessState.NotRunning and self.active_engine_preference != preference:
+            terminate(self.crisper)
+        if self.crisper.state() == QProcess.ProcessState.NotRunning:
+            self.active_engine_preference = preference
+            environment = QProcessEnvironment.systemEnvironment()
+            environment.insert("SINGLAYER_ENGINE", preference)
+            self.crisper.setProcessEnvironment(environment)
+            self.crisper.start("bash", [str(ROOT / "scripts/run-transcriber.sh")])
+        self.settings.setValue("full-track-url", url)
+        process = QProcess(self)
+        self.full_job = process
+        identity = self.track["id"]
+        output = bytearray()
+        def consume():
+            output.extend(bytes(process.readAllStandardOutput()))
+            if len(output) > 4_000_000:
+                self.cancel_full_track()
+                self.activity.setText("Resultado completo demasiado grande")
+                return
+            while b"\n" in output:
+                line, _, rest = output.partition(b"\n")
+                output[:] = rest
+                if self.full_job is not process or (self.track or {}).get("id") != identity:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if "full_progress" in event:
+                        self.activity.setText(event["full_progress"])
+                        self.progress.setValue(event["percent"])
+                    elif "full_result" in event:
+                        result = event["full_result"]
+                        self.full_document = result["document"]
+                        self.full_original_document = result.get("raw_document", result["document"])
+                        self.full_completed = True
+                        self.progress.setValue(100)
+                        self.reading_changed()
+                        self.activity.setText("Pista completa analizada · tiempos estimados" if self.full_document else "Pista completa analizada · sin palabras fiables")
+                    elif "fatal" in event:
+                        self.activity.setText(event["fatal"])
+                except (ValueError, KeyError, TypeError):
+                    self.activity.setText("Resultado de análisis inválido")
+        def finished(*_):
+            consume()
+            if self.full_job is process:
+                self.full_job = None
+                if not self.full_completed:
+                    self.start_live()
+            self.retiring_jobs.discard(process)
+            process.deleteLater()
+        process.readyReadStandardOutput.connect(consume)
+        process.finished.connect(finished)
+        def failed(error):
+            if error == QProcess.ProcessError.FailedToStart:
+                self.activity.setText("No se pudo iniciar el analizador completo")
+                finished()
+        process.errorOccurred.connect(failed)
+        payload = json.dumps({"url": url, "track": dict(self.track), "engine": engine["backend"],
+                              "route": self.lyric_policy()["route"], "catalog": self.document}).encode()
+        process.started.connect(lambda: (process.write(payload), process.closeWriteChannel()))
+        self.progress.setRange(0, 100)
+        process.start(sys.executable, ["-m", "singlayer.worker", "full-track"])
+
     def manual_search(self):
         if not self.track:
             return
@@ -1468,7 +1603,7 @@ class Dashboard(QWidget):
     def check_engines(self):
         importlib.invalidate_caches()
         missing = [
-            name for name in ("syncedlyrics", "shazamio", "numpy", "espeakng_loader", "langid", "pykakasi") if importlib.util.find_spec(name) is None
+            name for name in ("syncedlyrics", "shazamio", "numpy", "espeakng_loader", "langid", "pykakasi", "yt_dlp") if importlib.util.find_spec(name) is None
         ]
         if sys.version_info >= (3, 13) and importlib.util.find_spec("audioop") is None:
             missing.append("audioop-lts")
@@ -1526,6 +1661,7 @@ class Dashboard(QWidget):
             )
 
     def stop(self):
+        self.cancel_full_track()
         self.wanted = False
         self.stop_live(reset=True)
         terminate(self.crisper)

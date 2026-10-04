@@ -26,6 +26,9 @@ def unique_match(text, lines):
 
     def words(value):
         value = unicodedata.normalize("NFKC", value).casefold()
+        # Decoration must not split words or distinguish typographic apostrophes.
+        value = "".join(char for char in value if unicodedata.category(char) != "Cf")
+        value = re.sub(r"(?<=\w)['’ʼ](?=\w)", "", value)
         return re.findall(r"[\u3040-\u30ff\u3400-\u9fff]|[^\W\u3040-\u30ff\u3400-\u9fff]+", value)
 
     query = words(text)

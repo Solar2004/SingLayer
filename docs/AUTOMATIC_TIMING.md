@@ -84,9 +84,29 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 132 pruebas completas, Ruff, shell y diff check pasan.
+- 138 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
 incierto. Shazam había acertado10/10 muestras de la matriz anterior; eso prueba
 identidad en ellas, no sincronización universal. No se comprometen medios/letras.
+
+## Artista ausente, recortes y símbolos
+
+Sin artista, la letra de metadatos queda candidata mientras Shazam intenta
+corroborar título/artista con dos muestras coincidentes. Si falla, no se inventa
+identidad. SoundCloud, identidad reconocida, artista ausente y catálogos con
+frases fuera de la duración del upload activan comprobación acústica.
+
+El reloj usa la posición del fragmento reproducido, no exige escuchar desde el
+principio. Tres referencias pueden mapear un recorte desde el segundo90 del
+original al segundo2 del upload. Si un estribillo repetido no identifica su
+ocurrencia, se muestra la transcripción medida sin asignarle una posición original
+inventada. El avance del navegador dentro de una canción completa conserva su
+propio reloj; un upload recortado necesita estimar el desfase.
+
+La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográficos
+y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
+no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
+
+Regresiones específicas y puerta completa:138 pruebas, Ruff y diff check pasan.

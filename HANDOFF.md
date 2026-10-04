@@ -9,7 +9,7 @@ Esta sección reemplaza las restricciones y decisiones históricas inferiores.
 El usuario autorizó un motor alternativo probado para canciones y pidió una línea
 de tiempo automática por segundos/duración.
 
-- **132 pruebas completas pasan**, Ruff, shell y diff check OK.
+- **138 pruebas completas pasan**, Ruff, shell y diff check OK.
 - **Whisper.cpp large-v3-turbo Q5_0 instalado y seleccionado en RX590 Vulkan**.
   API real/DTW validado, SHA256 y revisiones fijadas. Crisper small CPU conservado;
   `SINGLAYER_ENGINE=crisper` lo selecciona. GPU de Crisper sigue sin fuente original

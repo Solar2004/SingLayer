@@ -186,8 +186,8 @@ def test_seek_discards_live_epoch_and_old_document(panel, monkeypatch):
     assert panel.live_document is None
 
 
-def test_last_resort_enables_live_and_catalog_does_not(panel, monkeypatch):
-    receive(panel)
+def test_last_resort_enables_live_and_reliable_catalog_does_not(panel, monkeypatch):
+    receive(panel, track={**TRACK, "source": "YouTube", "artist": "Singer"})
     starts = []
     monkeypatch.setattr(panel, "start_live", lambda: starts.append(panel.live_enabled))
     panel.job_event({"finished": True, "result": {}})
@@ -307,3 +307,14 @@ def test_duration_crop_keeps_pronunciation_for_remaining_phrase(panel):
     assert len(panel._adjusted_document["lines"]) == 1
     assert panel._adjusted_document["lines"][0]["translation"] == "jelou"
     assert panel._adjusted_document["lines"][0]["end"] == 12
+
+
+
+@pytest.mark.parametrize("artist,source,duration", [("", "YouTube", 180), ("Uploader", "SoundCloud", 180),
+                                                    ("Singer", "YouTube", 12)])
+def test_uncertain_or_cropped_upload_starts_acoustic_alignment(panel, monkeypatch, artist, source, duration):
+    panel.track = {**TRACK, "artist": artist, "source": source, "duration": duration}
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    doc = document(parse_lrc("[00:05]First original phrase\n[00:20]Later original phrase"), "test", "Demo", "Singer")
+    panel.job_event({"finished": True, "result": {"document": doc}})
+    assert panel.live_enabled

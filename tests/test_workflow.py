@@ -257,3 +257,21 @@ def test_additional_real_world_edit_notations(title, expected):
                tuple(value.casefold() for value in expected) for c in candidates)
     assert search_identity(track)["edited"]
     assert all(c.get("duration") is None for c in candidates)
+
+
+@pytest.mark.asyncio
+async def test_missing_artist_waits_for_audio_even_when_metadata_catalog_hits():
+    recognized = {"title": "Real song", "artist": "Real artist", "recording_id": "actual"}
+    calls = []
+
+    async def invoke(action, data, timeout):
+        calls.append((action, data.get("artist")))
+        if action == "recognize":
+            await asyncio.sleep(.01)
+            return recognized
+        return {"document": {"source": "lrclib", "title": data["title"]}}
+
+    result = await resolve({**TRACK, "artist": ""}, invoke, lambda event: None, audio_allowed=True)
+    assert result["recognized"] == recognized
+    assert result["evidence"]["matches"] == 2
+    assert result["document"]["title"] == "Real song"

@@ -59,3 +59,23 @@ def test_three_independent_anchors_tolerate_one_asr_word_error_each():
     observed = {"lines": [{"text": text.replace("amber", "ocher"), "start": time}
                           for text, time in zip(texts, [20, 50, 80])]}
     assert estimate_clock(observed, catalog) == {"offset": 3, "speed": .8, "anchors": 3}
+
+
+
+def test_symbols_and_typographic_contractions_preserve_matching():
+    from singlayer.alignment import unique_match
+
+    lines = [{"text": "♪ Ｉ don't wanna leave you tonight… ♡"}]
+    assert unique_match("I don’t wanna lea\u200bve you tonight", lines) == (0, 1, 1.0)
+
+
+def test_clip_beginning_at_original_middle_maps_to_clip_clock():
+    from singlayer.alignment import estimate_clock
+
+    texts = ["first unique phrase in this original verse", "second entirely distinct sentence for this song",
+             "third separate phrase with enough clear evidence"]
+    catalog = {"lines": [{"text": text, "start": time} for text, time in zip(texts, [90, 114, 138])]}
+    observed = {"lines": [{"text": text, "start": time} for text, time in zip(texts, [2, 22, 42])]}
+    clock = estimate_clock(observed, catalog)
+    assert clock["speed"] == pytest.approx(1.2)
+    assert (114 - clock["offset"]) / clock["speed"] == pytest.approx(22)

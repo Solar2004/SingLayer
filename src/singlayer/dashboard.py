@@ -1011,9 +1011,9 @@ class Dashboard(QWidget):
                             structurally_edited = any(word in title for word in ("remix", "mashup", "loop", "cut", "snippet"))
                             self.automatic_clock = clock if not structurally_edited else None
                             if not doc and not self.automatic_clock:
-                                self.publish()
-                                self.activity.setText("Audio sin coincidencia inequívoca · ajuste manual disponible")
-                                continue
+                                # Repeated choruses cannot establish a catalog occurrence,
+                                # but the words measured in this window still have a clock.
+                                doc = event["transcript"]
                         if doc:
                             self.live_document = merge_transcript(self.live_document, doc)
                         self.remember_live()
@@ -1022,7 +1022,7 @@ class Dashboard(QWidget):
                         self.activity.setText(
                             f"Reloj automático estimado · {self.automatic_clock['anchors']} referencias · {self.automatic_clock['speed']:.3f} ×"
                             if self.automatic_clock else
-                            f"{'Alineación' if self.document else 'Transcripción'} estimada · retraso {event['lag']:.1f} s"
+                            f"{'Alineación' if doc and doc.get('source') == 'audio-aligned' else 'Transcripción'} estimada · retraso {event['lag']:.1f} s"
                         )
                         self.publish()
                     elif event.get("discontinuity"):
@@ -1200,6 +1200,12 @@ class Dashboard(QWidget):
 
             self.live_enabled = (not self.document
                                  or search_identity(self.track or {"title": ""})["edited"]
+                                 or not (self.track or {}).get("artist", "").strip()
+                                 or (self.track or {}).get("source") == "SoundCloud"
+                                 or bool(result.get("recognized"))
+                                 or any(line["start"] >= (self.track or {}).get("duration", 0)
+                                        for line in (self.document or {}).get("lines", [])
+                                        if (self.track or {}).get("duration", 0) > 0)
                                  or len(self.catalog_candidates) > 1)
             if (self.offset.value(), self.speed.value()) != (0, 1):
                 self.live_enabled = False

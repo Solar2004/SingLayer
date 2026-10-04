@@ -125,7 +125,7 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
     """Each invoke is an isolated cancellable operation; never launch unbounded retries."""
     identity = search_identity(track)
     candidates = search_candidates(track)
-    uncertain = identity["edited"] or track.get("source") == "SoundCloud"
+    uncertain = identity["edited"] or not identity["artist"] or track.get("source") == "SoundCloud"
     emit({"stage": "metadata", "state": "done", "detail": f"{identity['title']} · {identity['artist']}"})
     if identity["edited"]:
         emit({"stage": "timing", "state": "warning", "detail": "Versión editada: ajusta desfase y velocidad"})

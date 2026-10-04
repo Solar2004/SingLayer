@@ -49,5 +49,7 @@ Current ASR integration is [CrisperWhisper2.0](https://github.com/nyrahealth/Cri
 code MIT, with its CTranslate2 fork (MIT) and Transformers/PyTorch conversion
 runtime retaining their licenses. **The2.0 model weights are under Nyra Health
 Non-Commercial Research License, not MIT**; commercial use requires appropriate
-licensing. Models are downloaded during setup, not bundled. The earlier
-whisper.cpp benchmark above is historical and is no longer the active runtime.
+licensing. Models are downloaded during setup, not bundled. The user later authorized Whisper.cpp as an alternative; large-v3-turbo Q5_0
+(MIT Whisper weights) is now the validated RX590 Vulkan runtime. Its pinned source,
+model revision and verified SHA256 are in docs/AUTOMATIC_TIMING.md. Crisper CPU
+remains explicitly selectable; its non-commercial model license is unchanged.

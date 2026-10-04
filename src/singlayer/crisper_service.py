@@ -10,7 +10,7 @@ from aiohttp import web
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".build/crisperwhisper/ready.json"
-SERVICE = "singlayer-crisperwhisper"
+SERVICE = "singlayer-transcription"
 PORT = 28748
 
 
@@ -55,7 +55,7 @@ def create_app(model):
     busy = False
 
     async def health(request):
-        return web.json_response({"service": SERVICE, "device": "cpu", "ready": True})
+        return web.json_response({"service": SERVICE, "device": "cpu", "backend": "crisperwhisper", "ready": True, "busy": busy})
 
     async def inference(request):
         nonlocal busy

@@ -55,6 +55,68 @@ def transcript_document(payload, window_start, duration):
             "title": "", "artist": "", "timing": "Word", "lines": lines}
 
 
+def whisper_document(payload, window_start, duration):
+    """Keep measured segment bounds; BPE tokens are not separate spoken words."""
+    if not all(math.isfinite(v) and v >= 0 for v in (window_start, duration)) or not 0 < duration <= 30:
+        raise ValueError("Ventana temporal inválida")
+    segments = payload.get("segments")
+    if not isinstance(segments, list) or len(segments) > 1024:
+        raise ValueError("Whisper.cpp devolvió segmentos inválidos")
+    lines = []
+    previous = 0.0
+    for segment in segments:
+        if float(segment.get("no_speech_prob", 0)) > .6:
+            continue
+        start, end = float(segment["start"]), float(segment["end"])
+        tokens = segment.get("words", [])
+        centers = [token.get("t_dtw", -1) for token in tokens]
+        dtw = bool(centers and all(type(value) is int and 0 <= value <= duration * 100 + 10
+                                  for value in centers)
+                   and centers == sorted(centers) and centers[-1] > centers[0])
+        if dtw:
+            # DTW supplies acoustic token centers, not exact word boundaries.
+            # Use their observed envelope as explicitly estimated line timing;
+            # never spread the leading instrumental silence over lyric tokens.
+            start, end = centers[0] / 100, centers[-1] / 100
+        text = segment["text"].strip()
+        if not text:
+            continue
+        if (not all(math.isfinite(v) for v in (start, end))
+                or not previous <= start < end <= duration + .1
+                or len(text) > 2000 or any(ord(c) < 32 for c in text)):
+            raise ValueError("Whisper.cpp devolvió tiempos o texto inválidos")
+        previous = end
+        words = []
+        token_end = start
+        valid_tokens = True
+        for token in tokens:
+            t0, t1 = float(token.get("start", -1)), float(token.get("end", -1))
+            value = token.get("word", "")
+            if (not isinstance(value, str) or not all(math.isfinite(v) for v in (t0, t1))
+                    or not token_end <= t0 <= t1 <= end + .1):
+                valid_tokens = False
+                break
+            token_end = t1
+            if t1 <= t0 or not value:
+                continue
+            if words and not value.startswith(" "):
+                words[-1]["text"] += value
+                words[-1]["end"] = window_start + min(t1, duration)
+            else:
+                words.append({"text": value, "start": window_start + t0,
+                              "end": window_start + min(t1, duration)})
+        if dtw or not valid_tokens or "".join(w["text"] for w in words).strip() != text:
+            words = []
+        lines.append({"index": len(lines), "id": f"whisper-{window_start:.3f}-{len(lines)}",
+                      "start": window_start + start, "end": window_start + min(end, duration),
+                      "text": text, "translation": "", "words": words})
+    if not lines:
+        return None
+    return {"source": "whisper-vulkan", "sourceName": "Transcripción estimada · Whisper.cpp Vulkan",
+            "title": "", "artist": "", "timing": "Word" if any(line["words"] for line in lines) else "Line",
+            "lines": lines}
+
+
 def wav_duration(wav_bytes):
     if len(wav_bytes) > 1_000_000:
         raise ValueError("Fragmento demasiado grande")
@@ -76,7 +138,7 @@ async def transcribe_window(wav_bytes, window_start):
             headers={"Content-Type": "audio/wav"}, allow_redirects=False
         ) as response:
             if response.status != 200:
-                raise RuntimeError(f"CrisperWhisper local respondió HTTP {response.status}")
+                raise RuntimeError(f"El motor local respondió HTTP {response.status}")
             output = bytearray()
             async for chunk in response.content.iter_chunked(8192):
                 output.extend(chunk)
@@ -84,5 +146,7 @@ async def transcribe_window(wav_bytes, window_start):
                     raise ValueError("Respuesta de CrisperWhisper demasiado grande")
     payload = json.loads(output)
     if payload.get("service") != SERVICE:
-        raise ValueError("El servicio no es CrisperWhisper")
+        raise ValueError("Servicio de transcripción inesperado")
+    if payload.get("backend") == "whisper.cpp":
+        return whisper_document(payload, window_start, duration)
     return transcript_document(payload, window_start, duration)

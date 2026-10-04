@@ -117,6 +117,10 @@ class Dashboard(QWidget):
         self.events = {}
         self.retiring_jobs = set()
         self.result_cache = {}
+        self.live_cache = {}
+        self.observed_document = None
+        self.clock_anchors = {}
+        self.automatic_clock = None
         self.guide = None
         self.guide_cache = {}
         self.guide_key = None
@@ -292,7 +296,7 @@ class Dashboard(QWidget):
         right.addWidget(self.lyric_lines, 1)
         self.lines_button = QToolButton()
         self.lines_button.setText("≡")
-        self.lines_button.setToolTip("Mostrar más líneas · doble clic en una línea para alinear")
+        self.lines_button.setToolTip("Ver inicio y final de cada parte de la letra · doble clic para corregir")
         self.lines_button.setAccessibleName("Mostrar letra completa con desplazamiento automático")
         self.lines_button.setCheckable(True)
         self.lines_button.toggled.connect(self.toggle_lines)
@@ -337,7 +341,7 @@ class Dashboard(QWidget):
         for name, spin in (("Desfase", self.offset), ("Velocidad", self.speed)):
             footer.addWidget(label(name, "muted"))
             footer.addWidget(spin)
-            spin.valueChanged.connect(self.publish)
+            spin.valueChanged.connect(self.alignment_changed)
         self.adjustments = QWidget(self)
         self.adjustments.setLayout(footer)
         self.adjustments.hide()
@@ -408,9 +412,10 @@ class Dashboard(QWidget):
         self.progress.setRange(0, 100)
         self._adjustment = None
         self.publish()
-        if not self.reading_mode.currentIndex() or not self.document:
+        source = self.document if self.automatic_clock else (self.live_document or self.document)
+        if not self.reading_mode.currentIndex() or not source:
             return
-        key = tuple(line["text"] for line in self.document["lines"])
+        key = tuple(line["text"] for line in source["lines"])
         if self.guide_key != key:
             self.guide = None
             self.guide_key = key
@@ -478,7 +483,8 @@ class Dashboard(QWidget):
         QTimer.singleShot(95_000, deadline)
 
     def practice(self):
-        if not self.guide or not self.document:
+        source = self.document if self.automatic_clock else (self.live_document or self.document)
+        if not self.guide or not source:
             self.activity.setText("Activa la guía de pronunciación en ⋯")
             return
         dialog = QDialog(self)
@@ -490,7 +496,7 @@ class Dashboard(QWidget):
         text.setPlainText(
             "\n\n".join(
                 f"{line['text']}\n{item['phonetic']}" + (f"\n{item['tip']}" if item.get("tip") else "")
-                for line, item in zip(self.document["lines"], self.guide)
+                for line, item in zip(source["lines"], self.guide)
             )
         )
         layout.addWidget(text)
@@ -604,6 +610,9 @@ class Dashboard(QWidget):
         identity, previous = track.get("id") if track else None, self.track.get("id") if self.track else None
         if identity != previous:
             self.stop_live(reset=True)
+            self.observed_document = None
+            self.clock_anchors = {}
+            self.automatic_clock = None
             self.calibration_anchor = None
             self.calibrating = False
             self.cancel_ai()
@@ -625,7 +634,7 @@ class Dashboard(QWidget):
             elapsed = now - self.clock_observed_at if self.track.get("playing") else 0
             if abs(track.get("position", 0) - self.track.get("position", 0) - elapsed) > 1.5:
                 self.stop_live()
-                self.live_document = None
+                self.live_document = self.live_cache.get(self.live_cache_key())
                 if self.job:
                     self.cancel_job()
                     self.resume_search = True
@@ -752,21 +761,29 @@ class Dashboard(QWidget):
     def publish(self, *_):
         adjustment = self.offset.value(), self.speed.value()
         source_document = self.live_document or self.document
-        if self.live_document:
+        if self.automatic_clock and self.document:
+            source_document = {**self.document, "source": "audio-clock",
+                               "sourceName": "Reloj estimado automáticamente · tres referencias o más"}
+            adjustment = self.automatic_clock["offset"], self.automatic_clock["speed"]
+        elif self.live_document:
             adjustment = (0, 1)
         if self._source_document is not source_document or self._adjustment != adjustment:
             self._source_document = source_document
             self._adjustment = adjustment
-            self._adjusted_document = adjusted_document(source_document, *adjustment)
-            if self.reading_mode.currentIndex() and not self.live_document:
-                self._adjusted_document = apply_guide(
-                    self._adjusted_document, self.guide, self.reading_mode.currentIndex() == 2
+            key = tuple(line["text"] for line in (source_document or {}).get("lines", []))
+            guided_document = source_document
+            if self.reading_mode.currentIndex() and self.guide_key == key:
+                guided_document = apply_guide(
+                    source_document, self.guide, self.reading_mode.currentIndex() == 2
                 )
+            self._adjusted_document = adjusted_document(
+                guided_document, *adjustment, duration=(self.track or {}).get("duration") or None
+            )
         self.link.update(self.track, self._adjusted_document)
         lines = (self._adjusted_document or {}).get("lines", [])
         position = (self.track or {}).get("position", 0)
         current = next((line for line in reversed(lines) if line["start"] <= position), None)
-        if self.live_document and current and current.get("end", position) < position - 3:
+        if self.live_document and not self.automatic_clock and current and current.get("end", position) < position - 3:
             current = None
 
         def display_text(line):
@@ -776,7 +793,15 @@ class Dashboard(QWidget):
         if self._visible_document is not self._adjusted_document:
             self._visible_document = self._adjusted_document
             self.lyric_lines.clear()
-            self.lyric_lines.addItems([display_text(line) for line in lines])
+            def timestamp(value):
+                minutes, seconds = divmod(value, 60)
+                return f"{int(minutes):02d}:{seconds:05.2f}"
+
+            self.lyric_lines.addItems([
+                f"{timestamp(line['start'])} – {timestamp(line['end'])}  {display_text(line)}"
+                if line.get("end") is not None else f"{timestamp(line['start'])}  {display_text(line)}"
+                for line in lines
+            ])
         row = next((i for i in range(len(lines) - 1, -1, -1) if lines[i]["start"] <= position), -1)
         if row != self.lyric_lines.currentRow():
             self.lyric_lines.setCurrentRow(row)
@@ -797,7 +822,11 @@ class Dashboard(QWidget):
             self.activity.setText("Letra original restaurada · selecciona la línea para ajustar")
             return
         self.stop_live(reset=True)
-        row = self.lyric_lines.row(item)
+        visible_row = self.lyric_lines.row(item)
+        visible = (self._adjusted_document or {}).get("lines", [])
+        chosen_id = visible[visible_row].get("id") if 0 <= visible_row < len(visible) else None
+        row = next((index for index, line in enumerate((self.document or {}).get("lines", []))
+                    if chosen_id is not None and line.get("id") == chosen_id), visible_row)
         if self.document and self.track and 0 <= row < len(self.document["lines"]):
             if self.calibrating:
                 self.record_anchor(row)
@@ -808,6 +837,7 @@ class Dashboard(QWidget):
             self.activity.setText("Letra alineada con este momento")
 
     def begin_calibration(self):
+        self.automatic_clock = None
         self.stop_live(reset=True)
         if not self.document:
             self.activity.setText("Primero hace falta una letra con tiempos")
@@ -841,14 +871,77 @@ class Dashboard(QWidget):
         self.calibrating = False
         self.calibration_anchor = None
         self.publish()
+        self.save_alignment()
         self.activity.setText(f"Sincronización calibrada · {speed:.3f} ×")
 
+    def alignment_key(self):
+        import hashlib
+
+        if not self.track or not self.document:
+            return None
+        identity = [self.track.get(key) for key in ("source", "title", "artist", "duration")]
+        identity.append([self.document.get("source"), self.document.get("title"), self.document.get("artist"),
+                         [(line["text"], line["start"], line.get("end")) for line in self.document["lines"]]])
+        return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+
+    def save_alignment(self):
+        key = self.alignment_key()
+        if not key:
+            return
+        try:
+            stored = json.loads(self.settings.value("alignments", "{}"))
+            if not isinstance(stored, dict):
+                stored = {}
+        except (ValueError, TypeError):
+            stored = {}
+        stored.pop(key, None)
+        if (self.offset.value(), self.speed.value()) != (0, 1):
+            stored[key] = [self.offset.value(), self.speed.value()]
+        while len(stored) > 32:
+            stored.pop(next(iter(stored)))
+        self.settings.setValue("alignments", json.dumps(stored))
+
+    def restore_alignment(self):
+        try:
+            stored = json.loads(self.settings.value("alignments", "{}"))
+            offset, speed = stored.get(self.alignment_key(), [0, 1])
+            if not (-3600 <= offset <= 3600 and .5 <= speed <= 2):
+                return
+        except (ValueError, TypeError, AttributeError):
+            return
+        for spin, value in ((self.offset, offset), (self.speed, speed)):
+            spin.blockSignals(True)
+            spin.setValue(value)
+            spin.blockSignals(False)
+
+    def alignment_changed(self, *_):
+        self.automatic_clock = None
+        self.stop_live(reset=True)
+        self.save_alignment()
+        self.publish()
+
     def reset_alignment(self):
+        self.automatic_clock = None
         self.calibrating = False
         self.calibration_anchor = None
         self.offset.setValue(0)
         self.speed.setValue(1)
+        self.publish()
         self.activity.setText("Tiempos originales restaurados")
+
+    def live_cache_key(self):
+        if not self.track:
+            return None
+        return (self.track.get("id"), self.track.get("title"), self.track.get("artist"),
+                self.track.get("duration"), tuple(line["text"] for line in (self.document or {}).get("lines", [])))
+
+    def remember_live(self):
+        key = self.live_cache_key()
+        if key and self.live_document:
+            self.live_cache.pop(key, None)
+            self.live_cache[key] = self.live_document
+            while len(self.live_cache) > 16:
+                self.live_cache.pop(next(iter(self.live_cache)))
 
     def stop_live(self, reset=False):
         self.live_epoch += 1
@@ -869,20 +962,28 @@ class Dashboard(QWidget):
                 or not self.track.get("playing") or self.track.get("stale")
                 or time.monotonic() < self.live_retry_at):
             return
-        if not (ROOT / ".build/crisperwhisper/ready.json").is_file():
+        from .transcriber_runtime import selected_engine
+
+        try:
+            engine = selected_engine()
+        except (ValueError, KeyError, OSError) as error:
+            self.activity.setText(str(error))
+            self.live_enabled = False
+            return
+        if engine.get("ready") is False:
             self.activity.setText("CrisperWhisper no instalado · ejecuta scripts/setup-crisper.sh")
             self.live_enabled = False
             return
         if self.crisper.state() == QProcess.ProcessState.NotRunning:
-            self.crisper.start("bash", [str(ROOT / "scripts/run-crisper.sh")])
+            self.crisper.start("bash", [str(ROOT / "scripts/run-transcriber.sh")])
         process = QProcess(self)
         self.live_job = process
         epoch = self.live_epoch
         output = bytearray()
-        self.activity.setText("Escuchando fragmentos · CrisperWhisper · CPU")
+        self.activity.setText(f"Escuchando fragmentos · {engine['label']}")
 
         def consume():
-            from .alignment import align_fragment
+            from .alignment import align_fragment, estimate_clock
             from .live_transcription import merge_transcript
 
             output.extend(bytes(process.readAllStandardOutput()))
@@ -898,22 +999,34 @@ class Dashboard(QWidget):
                     event = json.loads(line)
                     if "transcript" in event:
                         doc = event["transcript"]
+                        self.observed_document = merge_transcript(self.observed_document, doc)
                         if self.document:
                             choices = self.catalog_candidates or [self.document]
                             aligned = [align_fragment(doc, candidate) for candidate in choices]
                             aligned = [candidate for candidate in aligned if candidate]
                             signatures = {tuple(line["text"].casefold() for line in candidate["lines"]) for candidate in aligned}
                             doc = max(aligned, key=lambda candidate: len(candidate["lines"])) if len(signatures) == 1 else None
-                            if not doc:
+                            clock = estimate_clock(event["transcript"], self.document, self.clock_anchors)
+                            title = (self.track or {}).get("title", "").casefold()
+                            structurally_edited = any(word in title for word in ("remix", "mashup", "loop", "cut", "snippet"))
+                            self.automatic_clock = clock if not structurally_edited else None
+                            if not doc and not self.automatic_clock:
+                                self.publish()
                                 self.activity.setText("Audio sin coincidencia inequívoca · ajuste manual disponible")
                                 continue
-                        self.live_document = merge_transcript(self.live_document, doc)
+                        if doc:
+                            self.live_document = merge_transcript(self.live_document, doc)
+                        self.remember_live()
+                        if self.reading_mode.currentIndex():
+                            self.reading_changed()
                         self.activity.setText(
+                            f"Reloj automático estimado · {self.automatic_clock['anchors']} referencias · {self.automatic_clock['speed']:.3f} ×"
+                            if self.automatic_clock else
                             f"{'Alineación' if self.document else 'Transcripción'} estimada · retraso {event['lag']:.1f} s"
                         )
                         self.publish()
                     elif event.get("discontinuity"):
-                        self.live_document = None
+                        self.live_document = self.live_cache.get(self.live_cache_key())
                         self.publish()
                     elif "fatal" in event:
                         self.activity.setText(event["fatal"])
@@ -953,6 +1066,9 @@ class Dashboard(QWidget):
         process.start(sys.executable, ["-m", "singlayer.worker", "live"])
 
     def search(self, recognize=False, override=None):
+        self.observed_document = None
+        self.clock_anchors = {}
+        self.automatic_clock = None
         if not self.track:
             self.activity.setText("Primero conecta una canción")
             return
@@ -1049,6 +1165,7 @@ class Dashboard(QWidget):
             result = event["result"]
             self.document, self.plain = result.get("document"), result.get("plain", "")
             self.catalog_candidates = result.get("candidates", [])
+            self.restore_alignment()
             if self.document:
                 from kotonoha.lyrics.protocol import AdapterProtocolDecoder
 
@@ -1076,6 +1193,7 @@ class Dashboard(QWidget):
             )
             self.progress.setRange(0, 100)
             self.progress.setValue(100 if self.document or self.plain else 0)
+            self.live_document = self.live_cache.get(self.live_cache_key())
             self.publish()
             self.reading_changed()
             from .workflow import search_identity
@@ -1083,6 +1201,10 @@ class Dashboard(QWidget):
             self.live_enabled = (not self.document
                                  or search_identity(self.track or {"title": ""})["edited"]
                                  or len(self.catalog_candidates) > 1)
+            if (self.offset.value(), self.speed.value()) != (0, 1):
+                self.live_enabled = False
+                self.live_document = None
+                self.publish()
             self.start_live()
             return
         self.events[event["stage"]] = event

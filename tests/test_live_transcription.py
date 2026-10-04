@@ -111,7 +111,7 @@ async def test_live_cancellation_reaps_capture_and_bounds_pending_audio(monkeypa
         async def read(self, size):
             import json
             if self.url.endswith("/health"):
-                return json.dumps({"service": "singlayer-crisperwhisper", "ready": True}).encode()
+                return json.dumps({"service": "singlayer-transcription", "ready": True}).encode()
             observed["status"] += 1
             return json.dumps({"service": "singlayer", "track": {
                 **TRACK, "playing": observed["status"] < 3,
@@ -179,3 +179,11 @@ def test_exact_catalog_match_retains_measured_words():
     assert aligned["timing"] == "Word"
     assert aligned["lines"][0]["words"] == words
     assert aligned["lines"][0]["words"] is not words
+
+
+def test_earlier_replay_window_preserves_later_measured_timeline():
+    old = {"lines": [line("known earlier", 10, 12), line("known later", 30, 32)]}
+    incoming = {"lines": [line("new middle", 18, 20)]}
+    merged = merge_transcript(old, incoming)
+    assert [(part["text"], part["start"]) for part in merged["lines"]] == [
+        ("known earlier", 10), ("new middle", 18), ("known later", 30)]

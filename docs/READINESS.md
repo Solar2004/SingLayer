@@ -1,40 +1,24 @@
 # SingLayer readiness — 2026-10-04
 
-## Verified
+Estado actual: [sincronización automática](AUTOMATIC_TIMING.md).
 
-- 118 full tests pass, no exclusions; Ruff, shell syntax and diff checks pass.
-- Real desktop panel, bridge and Kotonoha launch; Brave WebNowPlaying connects.
-- Browser stream capture and ShazamIO work. Honeypie slowed/bass edition produced
-  3/3 matching recognitions; Coldplay was also recognized during autoplay.
-- Fixed recognized-edition catalog lookup. The observed Honeypie identity now
-  reaches JAWNY's 28 synced LRCLIB lines using real catalogs. Those lyrics retain
-  candidate status until audio/clock alignment establishes the correspondence.
-- Local pronunciation generated28 English guide lines for Honeypie; fixed short
-  repetitive refrains that langid misclassified despite an English song context.
-- Official CrisperWhisper small is installed, converted to CT2 CPU int8 and pinned
-  to bcaecf0a584a1f600d8897fe6032b9e2e56429a7. Readiness checks acoustic language
-  detection; restored native metadata fixes the observed detect_language failure.
-- Real local API: JFK11s audio, English detected,22 words,4 valid adapter lines,
-  8.56s inference. The existing100ms boundary tolerance handles a20ms final edge.
-- Desktop launcher already points to `.venv/bin/singlayer app`. Panel left open.
+- 132 pruebas completas pasan, sin exclusiones; Ruff, shell y diff check aprobados.
+- Whisper.cpp large-v3-turbo Q5_0 instalado y probado con RX590 Vulkan y DTW.
+- Vista de frases con inicio/final, duración real y reloj automático estimado.
+- Night Changes sped up: cinco referencias, velocidad1.233×, desfase2.842s;
+  referencia independiente a0.219s del tiempo acústico observado.
+- Night Dancer sped up: japonés detectado y tres líneas del catálogo alineadas.
+- Pronunciación local funciona también con letras transcritas y reloj automático.
+- Shazam identificó10/10 muestras de la matriz anterior; captura PipeWire nativa,
+  selector de navegador y normalización de variantes comprobados.
+- Renderer X11 revisado; compositor KWin Wayland de prueba confirmó layer shell
+  y prueba de ciclos de blur. Panel reiniciado con motor instalado.
+- Crisper small CPU conservado como selección explícita; Crisper Vulkan sigue
+  sin una fuente original descargable. No se presenta Crisper CPU como GPU.
 
-- Native PipeWire capture now works when pactl cannot see the stream. Browser choice
-  isolates Brave from other browser playback; muted or ambiguous streams are rejected.
-- Metadata regression coverage includes pipes, bass boosted, 8D, numeric speed,
-  slowed to perfection and TikTok suffixes.
+La precisión universal no está demostrada. Honeypie slowed/reverb y After Dark
+muy muffled dieron transcripciones incompletas. El reloj supone velocidad
+constante y no puede anticipar cortes futuros desconocidos. Se conserva ajuste
+manual; los resultados automáticos se presentan como estimados.
 
-## Still required before claiming everything is finished
-
-- Repeat corrected Honeypie flow from the start without autoplay changing track.
-- Actual singing matrix now exists (docs/MUSIC_VALIDATION.md). Small CPU recognizes
-  some English/Japanese words but returns empty or inaccurate fragments on others;
-  automatic edited-song alignment remains unproven. Repeated choruses stay ambiguous.
-  CPU produces delayed observed words; it cannot provide future lyrics on first playback.
-- CrisperWhisper GPU: Vulkan detects RX590, but original C++ source returns404.
-  No compiled/verified AMD backend exists yet; CPU is clearly labelled as CPU.
-- Inspect compositor blur and final visual behavior on real Wayland/X11. Offscreen
-  tests and process launch do not prove every desktop visual detail.
-
-No audio, complete lyrics or model weights are committed. Shazam recognition is
-not a universal guarantee for every remix; catalog timing requires calibration
-or observed alignment when the playback speed or structure changes.
+No se comprometen audio, letras completas ni pesos. Detalles y pins en el enlace.

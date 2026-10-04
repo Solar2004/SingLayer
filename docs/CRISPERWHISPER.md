@@ -1,4 +1,12 @@
-# CrisperWhisper 2.0 — motor actual
+# CrisperWhisper 2.0 — alternativa CPU
+
+Estado actual: el usuario autorizó Whisper.cpp Vulkan para canciones; es el motor
+seleccionado cuando está instalado. Crisper small CPU sigue disponible con
+`SINGLAYER_ENGINE=crisper`. Ambos comparten `singlayer-transcription` en28748.
+Véase [AUTOMATIC_TIMING.md](AUTOMATIC_TIMING.md). El runtime Crisper small está
+instalado y probado; las restricciones DNS inferiores son historia.
+
+## Implementación e instalación histórica
 
 Sustituye a whisper.cpp en el panel y en el transporte. No se mantiene un fallback
 silencioso al motor anterior. Los archivos de compilación y modelos anteriores

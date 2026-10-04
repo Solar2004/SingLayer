@@ -1,3 +1,6 @@
+> Matriz histórica del motor Crisper small CPU. Para el motor Vulkan instalado,
+> reloj automático y pruebas musicales posteriores, véase [AUTOMATIC_TIMING.md](AUTOMATIC_TIMING.md).
+
 # Pruebas musicales reales — 2026-10-04
 
 Se descargaron fragmentos públicos sin playlist mediante yt-dlp y se decodificaron

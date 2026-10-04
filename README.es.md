@@ -37,12 +37,20 @@ muestra portada, espectro, canción, letra actual y un único estado de búsqued
 El menú **⋯** contiene búsqueda manual, alineación, desfase, velocidad y modos de
 pronunciación. Cerrar detiene solamente los procesos propios de esta ventana.
 
-**≡** muestra la letra completa con texto más pequeño y desplazamiento automático.
+**≡** muestra cada parte de la letra con segundos de inicio/final y desplazamiento automático.
 Un doble clic sobre una línea la alinea con la posición actual de la canción.
 **⋯ → Elegir otra versión de la letra** consulta alternativas de LRCLIB reutilizando
 la búsqueda de Kotonoha; doble clic selecciona una. Las búsquedas automáticas de
 SoundCloud prueban también el orden canción-artista si falla artista-canción.
 Los errores de captura/proveedor ya no se presentan como ausencia de letras.
+
+La sincronización por audio mide automáticamente frases y, tras reunir al menos
+tres referencias únicas y coherentes, estima velocidad y desfase del catálogo.
+La duración real limita la línea de tiempo. Los tramos ya observados se conservan
+al retroceder; los ajustes manuales quedan guardados para esa grabación y letra.
+Whisper.cpp Vulkan large-v3-turbo está validado en RX590; instalación y evidencia
+en [Sincronización automática](docs/AUTOMATIC_TIMING.md). Primera reproducción
+necesita escuchar fragmentos; efectos extremos/cortes pueden exigir corrección.
 
 Para una versión slowed/sped up con velocidad constante, abre **⋯ → Calibrar
 slowed / sped up con dos líneas**. Haz doble clic en una línea cuando empiece a
@@ -123,18 +131,18 @@ texto original mientras está siendo estimada.
 
 ## Transcripción y versiones editadas
 
-Instala el motor CrisperWhisper 2.0 con `bash scripts/setup-crisper.sh`. El backend actual es CPU int8; la vía rápida CUDA no está disponible para la RX590. El panel inicia el servidor
-persistente cuando hace falta transcribir o contrastar una versión editada.
+Instala Whisper.cpp Vulkan con `bash scripts/setup-whisper-vulkan.sh`. El panel
+inicia el motor persistente cuando necesita contrastar una versión editada.
+CrisperWhisper CPU queda disponible mediante `SINGLAYER_ENGINE=crisper`.
 
-Captura ventanas de 12 segundos del flujo del navegador, cada 8 segundos, y
-mantiene una sola ventana pendiente. Descarta audio al pausar, saltar o cambiar de
-pista. Un resultado con tiempos inválidos se descarta y se espera otro fragmento.
-La captura inicial añade retraso: CrisperWhisper no conoce palabras futuras.
+Whisper captura ventanas de 24 segundos cada 16 segundos, con una sola pendiente.
+Descarta resultados obsoletos al pausar, saltar o cambiar de pista. DTW estima
+inicio y final de frases. Tres referencias únicas coherentes permiten ajustar
+velocidad y desfase del catálogo completo; una contradicción invalida ese reloj.
+Los estribillos ambiguos y las versiones con cortes usan alineación por tramos.
 
-La alineación automática compara frases inequívocas con el catálogo y ajusta
-solo esos fragmentos, incluso si aparecen en otro orden. Rechaza frases cortas y
-estribillos repetidos ambiguos. Las voces alteradas, mezcladas o tapadas por música
-pueden requerir el ajuste manual. Véase `docs/CRISPERWHISPER.md` y `HANDOFF.md`.
+La captura añade espera inicial. Las voces alteradas o tapadas por música pueden
+requerir ajuste manual. Véase `docs/AUTOMATIC_TIMING.md` para pruebas y límites.
 
 ## Compatibilidad y límites comprobados
 

@@ -17,8 +17,8 @@ manual title/artist correction, line selection, offset and speed are implemented
 
 The setup script installs engines by default; existing installs automatically
 prepare missing engines on launch. Requires network access; direct versions are
-in `requirements-engines.txt` (transitive dependencies not locked yet). `pactl`
-and `parec` are system dependencies. Capture targets one browser sink-input,
+in `requirements-engines.txt` (transitive dependencies not locked yet). `pactl`/`parec`
+and native `pw-dump`/`pw-record` capture one selected browser playback stream,
 never the desktop mix or microphone; ambiguous streams are rejected. A browser
 may itself mix tabs into a single stream, so tab isolation is not guaranteed.
 Recognition sends fingerprints to Shazam. No audio is retained.
@@ -29,8 +29,11 @@ text or audio is sent to a pronunciation service. The reading is approximate;
 unsupported languages retain their original text.
 
 Edited SoundCloud titles are normalized and searched in both artist/title orders.
-The panel can start a persistent CrisperWhisper 2.0 CPU service for last-resort estimated
-transcription or conservative audio-to-catalog alignment. See [Whisper setup and
+The panel can use a persistent Whisper.cpp large-v3-turbo Vulkan service, tested
+on RX590, or explicitly selected CrisperWhisper 2.0 CPU. DTW estimates phrase times;
+three consistent unique anchors estimate a complete constant-speed lyric clock.
+[Automatic timing and measured limits](docs/AUTOMATIC_TIMING.md) describes setup,
+line start/end ranges, duration clipping, replay history and saved corrections. See [Whisper setup and
 measured limits](docs/CRISPERWHISPER.md). Real catalog tests covered five SoundCloud
 variants; automatic timing on arbitrary remixes is not guaranteed.
 

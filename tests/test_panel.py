@@ -115,7 +115,7 @@ def test_multiline_follows_clock_and_aligns_selected_line(panel):
     assert panel.lyric_lines.currentRow() == 1
     panel.align_visible_line(panel.lyric_lines.item(2))
     assert panel.offset.value() == 8
-    assert panel.lyric_lines.currentRow() == 2
+    assert panel.lyric_lines.currentItem().text().endswith("Third demo")
 
 
 def test_search_failure_does_not_claim_catalog_absence_on_capture_error(panel):
@@ -218,3 +218,92 @@ def test_browser_choice_restarts_capture_and_sets_worker_environment(panel, monk
     assert panel.settings.value("browser-label") == "Brave"
     assert panel.audio_target is None
     assert calls == ["cancel_job", "stop_live", "meter", "probe_audio", "search"]
+
+
+def test_live_guide_uses_live_text_and_preserves_measured_timing(panel):
+    panel.track = TRACK
+    panel.live_document = {
+        "source": "crisperwhisper-local", "title": "", "artist": "", "timing": "Word",
+        "lines": [{"text": "Hello", "start": 12, "end": 14, "words": [], "translation": ""}],
+    }
+    panel.guide_cache[("Hello",)] = [{"phonetic": "jelou", "tip": ""}]
+    panel.reading_mode.setCurrentIndex(2)
+    assert panel.guide_key == ("Hello",)
+    assert panel._adjusted_document["lines"][0]["translation"] == "jelou"
+    assert panel._adjusted_document["lines"][0]["start"] == 12
+    # A new fragment must never inherit the previous fragment's pronunciation.
+    panel.live_document = {**panel.live_document, "lines": [{"text": "Goodbye", "start": 20, "end": 22, "words": [], "translation": ""}]}
+    panel.publish()
+    assert panel._adjusted_document["lines"][0]["translation"] == ""
+
+
+def test_calibration_saved_for_exact_recording_and_catalog(panel, monkeypatch):
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    panel.track = TRACK
+    doc = document(parse_lrc("[00:01]Original demo\n[00:05]Second line"), "test", "Demo", "Singer")
+    panel.job_event({"finished": True, "result": {"document": doc}})
+    panel.offset.setValue(3)
+    panel.speed.setValue(.8)
+    saved = panel.settings.value("alignments")
+    # Simulate startup defaults without erasing the stored calibration.
+    for spin, value in ((panel.offset, 0), (panel.speed, 1)):
+        spin.blockSignals(True)
+        spin.setValue(value)
+        spin.blockSignals(False)
+    panel.restore_alignment()
+    assert (panel.offset.value(), panel.speed.value()) == (3, .8)
+    panel.track = {**TRACK, "title": "Different upload"}
+    panel.restore_alignment()
+    assert (panel.offset.value(), panel.speed.value()) == (0, 1)
+    assert panel.settings.value("alignments") == saved
+    panel.track = TRACK
+    panel.restore_alignment()
+    panel.reset_alignment()
+    panel.restore_alignment()
+    assert (panel.offset.value(), panel.speed.value()) == (0, 1)
+
+
+def test_seek_reuses_only_measured_fragments_of_same_recording(panel, monkeypatch):
+    receive(panel)
+    doc = {"source": "whisper-vulkan", "title": "", "artist": "", "timing": "Line",
+           "lines": [{"text": "Measured phrase", "start": 2, "end": 5, "words": [], "translation": ""}]}
+    panel.live_document = doc
+    panel.remember_live()
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    receive(panel, track={**TRACK, "position": 2})
+    assert panel.live_document is doc
+    receive(panel, track={**TRACK, "id": "other-recording", "title": "Different upload"})
+    assert panel.live_document is None
+
+
+def test_automatic_clock_maps_future_catalog_and_shows_second_ranges(panel):
+    panel.track = TRACK
+    panel.document = document(parse_lrc("[00:19]First demo\n[00:43]Second demo\n[01:07]Third demo"), "test", "Demo", "Singer")
+    panel.automatic_clock = {"offset": 3, "speed": .8, "anchors": 3}
+    panel.publish()
+    assert panel._adjusted_document["lines"][0]["start"] == 20
+    assert panel._adjusted_document["lines"][1]["start"] == 50
+    assert panel._adjusted_document["source"] == "audio-clock"
+    assert panel.lyric_lines.item(0).text().startswith("00:20.00 – 00:50.00")
+    panel.offset.setValue(2)
+    assert panel.automatic_clock is None
+
+
+def test_timeline_is_cropped_to_actual_song_duration_and_final_line_ends_there():
+    doc = {"lines": [{"text": "in song", "start": 5, "end": 14, "words": []},
+                     {"text": "outside song", "start": 20, "end": 25, "words": []}]}
+    cropped = adjusted_document(doc, duration=12)
+    assert len(cropped["lines"]) == 1
+    assert cropped["lines"][0]["end"] == 12
+    assert doc["lines"][0]["end"] == 14
+
+
+def test_duration_crop_keeps_pronunciation_for_remaining_phrase(panel):
+    panel.track = {**TRACK, "duration": 12}
+    panel.document = document(parse_lrc("[00:05]Hello\n[00:20]Goodbye"), "test", "Demo", "Singer")
+    panel.guide_cache[("Hello", "Goodbye")] = [
+        {"phonetic": "jelou", "tip": ""}, {"phonetic": "gudbai", "tip": ""}]
+    panel.reading_mode.setCurrentIndex(2)
+    assert len(panel._adjusted_document["lines"]) == 1
+    assert panel._adjusted_document["lines"][0]["translation"] == "jelou"
+    assert panel._adjusted_document["lines"][0]["end"] == 12

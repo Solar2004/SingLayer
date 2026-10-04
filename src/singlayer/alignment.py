@@ -84,3 +84,34 @@ def align_fragment(transcript, catalog):
     result.sort(key=lambda line: line["start"])
     return {**catalog, "source": "audio-aligned", "sourceName": "Letra alineada al audio · estimada",
             "timing": "Word" if any(line["words"] for line in result) else "Line", "lines": result}
+
+
+def estimate_clock(transcript, catalog, anchors=None):
+    """Three distinct acoustic/text anchors can estimate a constant playback clock.
+
+    This is a prediction, not proof of future sections. A contradictory later
+    anchor rejects the entire estimate; repeated choruses alone never qualify.
+    Optional anchors retains measured references across overlapping windows.
+    """
+    if anchors is None:
+        anchors = {}
+    for segment in (transcript or {}).get("lines", []):
+        match = unique_match(segment["text"], catalog["lines"])
+        if not match or match[1] != 1 or match[2] < .85:
+            continue
+        index = match[0]
+        original = catalog["lines"][index]["start"]
+        point = (segment["start"], original)
+        if index in anchors and abs(anchors[index][0] - point[0]) > .75:
+            anchors.clear()  # A changed acoustic occurrence invalidates the old clock.
+        anchors[index] = point
+    points = sorted(anchors.values())
+    if len(points) < 3 or not all(math.isfinite(value) for point in points for value in point):
+        return None
+    try:
+        offset, speed = calibrate(points[0], points[-1])
+    except ValueError:
+        return None
+    if any(abs((original - offset) / speed - position) > .75 for position, original in points):
+        return None
+    return {"offset": offset, "speed": speed, "anchors": len(points)}

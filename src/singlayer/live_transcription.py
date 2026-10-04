@@ -51,8 +51,12 @@ def merge_transcript(previous, incoming):
     if not incoming:
         return previous
     boundary = incoming["lines"][0]["start"]
-    lines = [dict(line) for line in (previous or {}).get("lines", []) if line["end"] <= boundary]
-    for line in incoming["lines"]:
+    end = incoming["lines"][-1]["end"]
+    retained = [dict(line) for line in (previous or {}).get("lines", [])
+                if line["end"] <= boundary or line["start"] >= end]
+    candidates = sorted([*retained, *incoming["lines"]], key=lambda line: line["start"])
+    lines = []
+    for line in candidates:
         if lines and not line.get("words") and not lines[-1].get("words") and lines[-1]["text"].casefold() == line["text"].casefold() and line["start"] - lines[-1]["end"] < 2:
             lines[-1]["end"] = line["end"]
         else:
@@ -91,13 +95,14 @@ async def _run_live(data, emit):
                 async with session.get("http://127.0.0.1:28748/health", allow_redirects=False) as response:
                     if response.status == 200:
                         health = json.loads(await response.content.read(4096))
-                        if health.get("service") == "singlayer-crisperwhisper" and health.get("ready") is True:
+                        if health.get("service") == "singlayer-transcription" and health.get("ready") is True and not health.get("busy", False):
                             break
             except (aiohttp.ClientError, TimeoutError):
                 pass
             await asyncio.sleep(.5)
         else:
-            raise RuntimeError("CrisperWhisper no está preparado; revisa el modelo y el diagnóstico")
+            raise RuntimeError("El motor de transcripción no está preparado; revisa el modelo y el diagnóstico")
+        window, hop = (24, 16) if health.get("backend") == "whisper.cpp" else (WINDOW, HOP)
         track = await status()
         if not continuous(track, track, 0):
             raise PlaybackChanged()
@@ -118,14 +123,14 @@ async def _run_live(data, emit):
                 chunk = await asyncio.wait_for(process.stdout.readexactly(RATE * 2), 3)
                 buffer.extend(chunk)
                 samples += RATE
-                if len(buffer) >= WINDOW * RATE * 2:
-                    pcm = bytes(buffer[:WINDOW * RATE * 2])
-                    begin = anchor["position"] + samples / RATE - WINDOW
+                if len(buffer) >= window * RATE * 2:
+                    pcm = bytes(buffer[:window * RATE * 2])
+                    begin = anchor["position"] + samples / RATE - window
                     if pending.full():
                         pending.get_nowait()
-                        emit({"live_status": "CrisperWhisper retrasado · descartando ventana antigua"})
+                        emit({"live_status": "Transcripción retrasada · descartando ventana antigua"})
                     pending.put_nowait((pcm, begin))
-                    del buffer[:HOP * RATE * 2]
+                    del buffer[:hop * RATE * 2]
 
         async def monitor():
             previous, observed = anchor, started
@@ -163,7 +168,7 @@ async def _run_live(data, emit):
                 if document:
                     emit({"transcript": document, "lag": max(0, current["position"] - document["lines"][-1]["end"])})
                 else:
-                    emit({"live_status": "Sin voz reconocible · esperando otro fragmento"})
+                    emit({"live_status": "Sin palabras fiables · esperando otro fragmento"})
 
         tasks = [asyncio.create_task(task()) for task in (capture, monitor, infer)]
         try:

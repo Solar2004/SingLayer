@@ -12,7 +12,7 @@ from PyQt6.QtNetwork import QAbstractSocket
 from PyQt6.QtWebSockets import QWebSocket
 
 
-def adjusted_document(document, offset=0.0, speed=1.0):
+def adjusted_document(document, offset=0.0, speed=1.0, duration=None):
     if not math.isfinite(offset) or not math.isfinite(speed) or not 0.5 <= speed <= 2:
         raise ValueError("Ajuste temporal inválido")
     result = copy.deepcopy(document)
@@ -22,6 +22,21 @@ def adjusted_document(document, offset=0.0, speed=1.0):
                 for key in ("start", "end"):
                     if span.get(key) is not None:
                         span[key] = max(0, (span[key] - offset) / speed)
+        if duration is not None:
+            if not math.isfinite(duration) or duration <= 0:
+                raise ValueError("Duración de canción inválida")
+            cropped = []
+            for line in result["lines"]:
+                line["end"] = min(line["end"] if line.get("end") is not None else duration, duration)
+                if line["start"] >= line["end"]:
+                    continue
+                line["words"] = [word for word in line.get("words", [])
+                                 if word["start"] < line["end"] and word["end"] > line["start"]]
+                for word in line["words"]:
+                    word["start"] = max(word["start"], line["start"])
+                    word["end"] = min(word["end"], line["end"])
+                cropped.append(line)
+            result["lines"] = cropped
     return result
 
 

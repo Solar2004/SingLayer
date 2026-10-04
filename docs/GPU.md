@@ -1,3 +1,22 @@
+# GPU RX590: estado actual e investigación histórica
+
+## Ruta instalada y probada — 2026-10-04
+
+El usuario autorizó otro motor probado para canciones. Whisper.cpp
+large-v3-turbo Q5_0 funciona con Vulkan y DTW en RX590 GME/RADV POLARIS10.
+`bash scripts/setup-whisper-vulkan.sh` reproduce la instalación y exige una
+inferencia real con Vulkan antes de publicar ready.json. El servicio comprueba
+el backend al iniciar. No se modificaron drivers.
+
+Pruebas musicales, revisiones, hash y límites: [AUTOMATIC_TIMING.md](AUTOMATIC_TIMING.md).
+CrisperWhisper small CPU permanece disponible explícitamente. Su ruta comunitaria
+C++ sigue devolviendo404; no se afirma que Crisper funcione en GPU.
+
+## Investigación anterior (restricciones ya superadas)
+
+Lo siguiente documenta sesiones anteriores. Las afirmaciones de falta de red o
+/dev/dri no describen el entorno actual, que permitió compilar y probar Whisper.
+
 # CrisperWhisper on RX590: investigation and next proof
 
 2026-10-04. **Not yet working or validated on GPU.** Current integrated backend

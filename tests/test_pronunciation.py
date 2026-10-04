@@ -107,3 +107,28 @@ def test_short_repeated_english_chorus_uses_song_context():
     ])
     assert all(item["tip"].startswith("Idioma en") for item in result)
     assert result[1]["phonetic"] != "Oh honey, honeypie, honey, honey, honeypie"
+
+
+@pytest.mark.parametrize("text,language", [
+    ("Canto contigo y la noche se llena de luz.", "es"),
+    ("I will sing with you until the morning comes.", "en"),
+    ("Je chante avec toi quand la nuit tombe sur la ville.", "fr"),
+    ("Я пою с тобой, когда наступает ночь.", "ru"),
+])
+def test_real_local_reading_for_spanish_speakers_across_languages(text, language):
+    from singlayer.pronunciation.local import local_guide
+
+    item = local_guide([text, text])[0]
+    if language == "es":
+        assert item["phonetic"] == text
+    else:
+        assert item["tip"].startswith(f"Idioma {language}")
+        assert item["phonetic"] != text
+    assert len(item["tip"]) <= 160
+    if language == "ru":
+        assert not any("\u0400" <= char <= "\u04ff" for char in item["phonetic"])
+        assert "ʲ" not in item["phonetic"]
+        assert "suavización" in item["tip"]
+    if language == "fr":
+        assert "nasalización" in item["tip"]
+        assert "ingleses" not in item["tip"]

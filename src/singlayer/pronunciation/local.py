@@ -7,7 +7,7 @@ from pathlib import Path
 
 def spanish_reading(ipa):
     replacements = {
-        "tʃ": "ch", "dʒ": "y", "aɪ": "ai", "eɪ": "ei", "ɔɪ": "oi", "aʊ": "au", "oʊ": "ou",
+        "tʃ": "ch", "tɕ": "ch", "ʈʂ": "ch", "dʒ": "y", "ɕ": "sh", "ʂ": "sh", "ʐ": "zh", "ʲ": "y", "ɨ": "i", "ʏ": "ü", "aɪ": "ai", "eɪ": "ei", "ɔɪ": "oi", "aʊ": "au", "oʊ": "ou",
         "əʊ": "ou", "ʃ": "sh", "ʒ": "zh", "θ": "th", "ð": "dh", "ŋ": "ng", "ɲ": "ñ",
         "ɹ": "r", "ɾ": "r", "ʁ": "r", "ɣ": "g", "ɡ": "g", "ɪ": "i", "ʊ": "u", "ɛ": "e",
         "æ": "a", "ɑ": "a", "ɒ": "o", "ɔ": "o", "ʌ": "a", "ə": "a", "ɜ": "e", "ɐ": "a",
@@ -19,6 +19,16 @@ def spanish_reading(ipa):
     accents = dict(zip("aeiou", "áéíóú"))
     result = re.sub(r"ˈ([^aeiou\s]*)([aeiou])", lambda m: m[1] + accents[m[2]], result)
     return result.replace("ˈ", "").strip()
+
+
+LANGUAGE_TIPS = {
+    "en": "h aspirada; sh/ch distintos; th/dh dentales; r sin vibración española.",
+    "fr": "~ indica nasalización; ü: labios como u y lengua como i; r francesa. Los finales mudos se omiten.",
+    "ru": "y tras consonante indica suavización, no otra sílaba; ы se aproxima con i, pero no es la i española.",
+    "de": "ü/eu: vocales redondeadas; j aproxima ch fuerte; hy indica ch suave.",
+    "it": "Mantén consonantes dobles y vocales claras; el acento escrito orienta la lectura.",
+    "pt": "~ indica nasalización; sh/zh representan sonidos distintos de s; vocales reducidas aproximadas.",
+}
 
 
 def local_guide(texts):
@@ -82,7 +92,7 @@ def local_guide(texts):
                     raise ValueError("Texto fonético fuera de límite")
                 phonemes = " ".join(chunks)
                 item = {"phonetic": spanish_reading(phonemes) or text,
-                        "tip": f"Idioma {language} · guía aproximada. h aspirada; sh/ch distintos; th/dh ingleses; ~ nasal; ü redondeada."}
+                        "tip": f"Idioma {language} · guía aproximada. {LANGUAGE_TIPS[language]}"}
             cache[text] = item
             guide.append(item)
     finally:

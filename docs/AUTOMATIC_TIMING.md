@@ -84,7 +84,7 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 162 pruebas completas, Ruff, shell y diff check pasan.
+- 166 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
@@ -109,7 +109,7 @@ La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográf
 y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
 no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
 
-Regresiones específicas y puerta completa:162 pruebas, Ruff y diff check pasan.
+Regresiones específicas y puerta completa:166 pruebas, Ruff y diff check pasan.
 
 ## Contexto de estribillos y cambios de sección
 
@@ -126,7 +126,7 @@ tramos medidos. Detección posterior al reconocimiento, no anticipación del cor
 
 Pruebas de regresión: repetición con/sin contexto, contexto roto por corte,
 invalidez del reloj anterior y reconstrucción con referencias nuevas. Puerta
-completa:162 pruebas. No se ha medido esta mejora contra anotaciones humanas de
+completa:166 pruebas. No se ha medido esta mejora contra anotaciones humanas de
 una nueva matriz de remixes reales.
 
 ## Corrección de letra que desaparecía al finalizar
@@ -139,7 +139,7 @@ con su limitación de retraso. Mantener el catálogo no demuestra que sus tiempo
 sean correctos: la comprobación acústica continúa.
 
 Regresión de UI: búsqueda terminada, fragmento atrasado, conservación de letra
-actual/completa, seek hacia tramo medido y regreso al catálogo.162 pruebas pasan.
+actual/completa, seek hacia tramo medido y regreso al catálogo.166 pruebas pasan.
 
 ## Elección de letra y motor
 
@@ -156,7 +156,7 @@ falla con mensaje, no cambia silenciosamente a CPU. Crisper CPU está instalado
 pero sus resultados de canto pueden ser peores; no se presenta como GPU.
 
 Regresiones: texto acústico directo con catálogo disponible, cambio a catálogo,
-persistencia de elección y limpieza al cambiar motor.162 pruebas completas pasan.
+persistencia de elección y limpieza al cambiar motor.166 pruebas completas pasan.
 
 ## Catálogo candidato e instrumental
 
@@ -176,7 +176,7 @@ No se garantiza detectar todas las alucinaciones con texto plausible.
 Se evaluó Silero VAD6.2.0 a umbrales0.5 y0.1: descartó también canto japonés real.
 NO se activó esa dependencia en producción ni se filtró todo canto como silencio.
 El modelo y herramienta experimental permanecen locales; el instalador no los
-requiere. Evidencia de regresión y puerta completa:162 pruebas, Ruff/diff OK.
+requiere. Evidencia de regresión y puerta completa:166 pruebas, Ruff/diff OK.
 
 ## Flujo de autoridad de la letra
 
@@ -202,7 +202,7 @@ servicio propio correspondiente y se separan cachés por motor/ruta.
 Regresiones: límites de palabras (Cutting Crew/Sloop no son cuts/loops), speed
 up sigue alineación, títulos remix eligen Whisper, texto remix no heredado del
 catálogo, sin ajustes de reloj original, elecciones explícitas preservadas y
-Shazam corroborado antes de devolver una letra confirmada.162 pruebas pasan.
+Shazam corroborado antes de devolver una letra confirmada.166 pruebas pasan.
 
 Este flujo ordena evidencias; no garantiza toda música perfecta ni texto futuro
 antes de capturar voz. Un remix usa audio real, pero mantiene retraso y posibles
@@ -222,4 +222,17 @@ inventar timestamps a partir del texto de catálogo. La guía de pronunciación,
 si está activada, conserva tiempos por línea pero desactiva resaltado de palabra.
 Si no se reconoce voz fiable, no hay transcripción que mostrar. Crisper small
 CPU puede ser impreciso con canto: no se garantiza producir la letra correcta
-para cualquier instrumental, canción o efecto.162 pruebas completas pasan.
+para cualquier instrumental, canción o efecto.166 pruebas completas pasan.
+
+## Guía para hispanohablantes
+
+Skill singable-spanish-guide revisada en español e instalada en Codex. Incluye
+español, inglés, francés, ruso, italiano, portugués, alemán y japonés; otros
+idiomas conservan el original si no hay lectura fiable. No traduce, añade versos
+ni modifica tiempos. Consejos locales específicos por idioma; suavización rusa
+se representa como y auxiliar y se explica, sin dejar ʲ sin interpretar.
+
+Prueba de ejecución real de eSpeak con frases propias en español/inglés/francés/
+ruso: español intacto, guías legibles, consejos específicos y sin cirílico/ʲ en
+la aproximación rusa. No es evaluación por fonetistas ni prueba de canto real.
+166 pruebas completas pasan; skill validada con quick_validate.

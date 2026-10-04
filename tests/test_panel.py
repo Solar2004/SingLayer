@@ -340,3 +340,34 @@ def test_delayed_audio_does_not_remove_full_catalog_after_search(panel, monkeypa
     panel.track = {**panel.track, "position": 42}
     panel.publish()
     assert panel.lyric_preview.text() == "Current original phrase"
+
+
+def test_explicit_transcription_keeps_raw_words_even_with_catalog(panel, monkeypatch):
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    panel.track = TRACK
+    panel.document = document(parse_lrc("[00:01]Catalog phrase"), "test", "Demo", "Singer")
+    raw = {"source": "whisper-vulkan", "lines": [
+        {"text": "Actual acoustic words", "start": 10, "end": 14, "words": [], "translation": ""}]}
+    panel.observed_document = raw
+    panel.lyric_source_picker.setCurrentIndex(panel.lyric_source_picker.findData("transcript"))
+    assert panel.settings.value("lyric_source") == "transcript"
+    assert panel._source_document is raw
+    assert panel.lyric_preview.text() == "Actual acoustic words"
+    panel.lyric_source_picker.setCurrentIndex(panel.lyric_source_picker.findData("catalog"))
+    assert not panel.live_enabled
+    assert panel._source_document is panel.document
+    assert panel.lyric_preview.text() == "Catalog phrase"
+
+
+def test_changing_engine_clears_acoustic_results_and_persists_choice(panel, monkeypatch):
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    panel.observed_document = {"lines": []}
+    panel.live_cache["old"] = {"lines": []}
+    panel.clock_anchors[1] = (2, 3)
+    panel.automatic_clock = {"offset": 2, "speed": 1}
+    panel.engine_picker.setCurrentIndex(panel.engine_picker.findData("crisper"))
+    assert panel.engine_preference == "crisper"
+    assert panel.settings.value("transcription_engine") == "crisper"
+    assert panel.observed_document is None
+    assert not panel.live_cache and not panel.clock_anchors
+    assert panel.automatic_clock is None

@@ -6,9 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def selected_engine():
+def selected_engine(preference=None):
+    preference = preference or os.environ.get("SINGLAYER_ENGINE", "auto")
     path = ROOT / ".build/whisper/ready.json"
-    if os.environ.get("SINGLAYER_ENGINE", "auto") != "crisper" and path.is_file():
+    if preference == "whisper" and not path.is_file():
+        raise ValueError("Whisper Vulkan no instalado · ejecuta scripts/setup-whisper-vulkan.sh")
+    if preference != "crisper" and path.is_file():
         config = json.loads(path.read_text())
         if (config.get("backend") != "whisper.cpp" or config.get("device") != "vulkan"
                 or config.get("model") != "large-v3-turbo-q5_0"):

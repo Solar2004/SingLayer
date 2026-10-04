@@ -98,6 +98,8 @@ class Dashboard(QWidget):
         self.setMinimumSize(740, 420)
         self.settings = QSettings("SingLayer", "Panel")
         self.closing = False
+        self.lyric_source = self.settings.value("lyric_source", "auto")
+        self.engine_preference = self.settings.value("transcription_engine", os.environ.get("SINGLAYER_ENGINE", "auto"))
         self.track = self.document = self.job = self.cover_reply = self.blur = None
         self.live_job = None
         self.live_epoch = 0
@@ -352,10 +354,63 @@ class Dashboard(QWidget):
         self.reading_mode.currentIndexChanged.connect(self.reading_changed)
         self.reading_mode.hide()
 
+        self.lyric_source_picker = QComboBox(self)
+        for title, value in (("Automático · catálogo y audio", "auto"),
+                             ("Solo letra del catálogo", "catalog"),
+                             ("Solo transcripción del audio", "transcript")):
+            self.lyric_source_picker.addItem(title, value)
+        self.lyric_source_picker.setCurrentIndex(max(0, self.lyric_source_picker.findData(self.lyric_source)))
+        self.lyric_source_picker.currentIndexChanged.connect(self.change_lyric_source)
+        self.lyric_source_picker.hide()
+        self.engine_picker = QComboBox(self)
+        for title, value in (("Motor automático", "auto"), ("Whisper.cpp · GPU Vulkan", "whisper"),
+                             ("CrisperWhisper · CPU", "crisper")):
+            self.engine_picker.addItem(title, value)
+        self.engine_picker.setCurrentIndex(max(0, self.engine_picker.findData(self.engine_preference)))
+        self.engine_picker.currentIndexChanged.connect(self.change_engine)
+        self.engine_picker.hide()
+
+    def change_lyric_source(self, *_):
+        self.lyric_source = self.lyric_source_picker.currentData()
+        self.settings.setValue("lyric_source", self.lyric_source)
+        self.stop_live(reset=True)
+        self.automatic_clock = None
+        self.live_enabled = self.lyric_source != "catalog"
+        self.reading_changed()
+        self.start_live()
+
+    def change_engine(self, *_):
+        self.engine_preference = self.engine_picker.currentData()
+        self.settings.setValue("transcription_engine", self.engine_preference)
+        self.stop_live(reset=True)
+        self.observed_document = None
+        self.live_cache.clear()
+        self.clock_anchors.clear()
+        self.automatic_clock = None
+        terminate(self.crisper)
+        self.live_enabled = self.lyric_source != "catalog"
+        self.publish()
+        # Wait for the owned server to release its port before starting another.
+        def restart():
+            if self.closing:
+                return
+            if self.crisper.state() != QProcess.ProcessState.NotRunning:
+                QTimer.singleShot(200, restart)
+            else:
+                self.start_live()
+        QTimer.singleShot(200, restart)
+
     def show_settings(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("Ajustes")
         layout = QVBoxLayout(dialog)
+        layout.addWidget(label("Qué letra mostrar", "muted"))
+        layout.addWidget(self.lyric_source_picker)
+        self.lyric_source_picker.show()
+        layout.addWidget(label("Motor de transcripción local", "muted"))
+        layout.addWidget(self.engine_picker)
+        self.engine_picker.show()
+        layout.addWidget(label("La transcripción necesita escuchar audio y llega con retraso. No anticipa las frases futuras.", "muted"))
         layout.addWidget(label("Corrección manual, solo si hace falta", "muted"))
         self.button("Buscar otra canción", self.manual_search, layout)
         self.button("Elegir otra versión de la letra", self.choose_version, layout)
@@ -395,7 +450,8 @@ class Dashboard(QWidget):
             )
         )
         dialog.exec()
-        for widget in (self.overlay_button, self.adjustments, self.reading_mode, self.browser):
+        for widget in (self.overlay_button, self.adjustments, self.reading_mode, self.browser,
+                       self.lyric_source_picker, self.engine_picker):
             widget.hide()
             widget.setParent(self)
 
@@ -759,6 +815,10 @@ class Dashboard(QWidget):
             self.overlay_attempted = False
 
     def display_document(self):
+        if self.lyric_source == "transcript":
+            return self.observed_document
+        if self.lyric_source == "catalog":
+            return self.document
         if self.automatic_clock and self.document:
             return self.document
         position = (self.track or {}).get("position", 0)
@@ -774,11 +834,11 @@ class Dashboard(QWidget):
     def publish(self, *_):
         adjustment = self.offset.value(), self.speed.value()
         source_document = self.display_document()
-        if self.automatic_clock and self.document:
+        if self.lyric_source == "auto" and self.automatic_clock and self.document:
             source_document = {**self.document, "source": "audio-clock",
                                "sourceName": "Reloj estimado automáticamente · tres referencias o más"}
             adjustment = self.automatic_clock["offset"], self.automatic_clock["speed"]
-        elif source_document is self.live_document and self.live_document:
+        elif (source_document is self.live_document and self.live_document) or self.lyric_source == "transcript":
             adjustment = (0, 1)
         if self._source_document is not source_document or self._adjustment != adjustment:
             self._source_document = source_document
@@ -796,7 +856,7 @@ class Dashboard(QWidget):
         lines = (self._adjusted_document or {}).get("lines", [])
         position = (self.track or {}).get("position", 0)
         current = next((line for line in reversed(lines) if line["start"] <= position), None)
-        if source_document is self.live_document and not self.automatic_clock and current and current.get("end", position) < position - 3:
+        if (source_document is self.live_document or self.lyric_source == "transcript") and not self.automatic_clock and current and current.get("end", position) < position - 3:
             current = None
 
         def display_text(line):
@@ -945,7 +1005,7 @@ class Dashboard(QWidget):
     def live_cache_key(self):
         if not self.track:
             return None
-        return (self.track.get("id"), self.track.get("title"), self.track.get("artist"),
+        return (self.engine_preference, self.track.get("id"), self.track.get("title"), self.track.get("artist"),
                 self.track.get("duration"), tuple(line["text"] for line in (self.document or {}).get("lines", [])))
 
     def remember_live(self):
@@ -978,7 +1038,7 @@ class Dashboard(QWidget):
         from .transcriber_runtime import selected_engine
 
         try:
-            engine = selected_engine()
+            engine = selected_engine(self.engine_preference)
         except (ValueError, KeyError, OSError) as error:
             self.activity.setText(str(error))
             self.live_enabled = False
@@ -988,6 +1048,9 @@ class Dashboard(QWidget):
             self.live_enabled = False
             return
         if self.crisper.state() == QProcess.ProcessState.NotRunning:
+            environment = QProcessEnvironment.systemEnvironment()
+            environment.insert("SINGLAYER_ENGINE", self.engine_preference)
+            self.crisper.setProcessEnvironment(environment)
             self.crisper.start("bash", [str(ROOT / "scripts/run-transcriber.sh")])
         process = QProcess(self)
         self.live_job = process
@@ -1013,7 +1076,7 @@ class Dashboard(QWidget):
                     if "transcript" in event:
                         doc = event["transcript"]
                         self.observed_document = merge_transcript(self.observed_document, doc)
-                        if self.document:
+                        if self.document and self.lyric_source == "auto":
                             choices = self.catalog_candidates or [self.document]
                             aligned = [align_fragment(doc, candidate) for candidate in choices]
                             aligned = [candidate for candidate in aligned if candidate]
@@ -1220,7 +1283,11 @@ class Dashboard(QWidget):
                                         for line in (self.document or {}).get("lines", [])
                                         if (self.track or {}).get("duration", 0) > 0)
                                  or len(self.catalog_candidates) > 1)
-            if (self.offset.value(), self.speed.value()) != (0, 1):
+            if self.lyric_source == "transcript":
+                self.live_enabled = True
+            elif self.lyric_source == "catalog":
+                self.live_enabled = False
+            if self.lyric_source != "transcript" and (self.offset.value(), self.speed.value()) != (0, 1):
                 self.live_enabled = False
                 self.live_document = None
                 self.publish()

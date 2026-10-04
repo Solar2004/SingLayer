@@ -84,7 +84,7 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 141 pruebas completas, Ruff, shell y diff check pasan.
+- 143 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
@@ -109,7 +109,7 @@ La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográf
 y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
 no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
 
-Regresiones específicas y puerta completa:141 pruebas, Ruff y diff check pasan.
+Regresiones específicas y puerta completa:143 pruebas, Ruff y diff check pasan.
 
 ## Contexto de estribillos y cambios de sección
 
@@ -126,7 +126,7 @@ tramos medidos. Detección posterior al reconocimiento, no anticipación del cor
 
 Pruebas de regresión: repetición con/sin contexto, contexto roto por corte,
 invalidez del reloj anterior y reconstrucción con referencias nuevas. Puerta
-completa:141 pruebas. No se ha medido esta mejora contra anotaciones humanas de
+completa:143 pruebas. No se ha medido esta mejora contra anotaciones humanas de
 una nueva matriz de remixes reales.
 
 ## Corrección de letra que desaparecía al finalizar
@@ -139,4 +139,21 @@ con su limitación de retraso. Mantener el catálogo no demuestra que sus tiempo
 sean correctos: la comprobación acústica continúa.
 
 Regresión de UI: búsqueda terminada, fragmento atrasado, conservación de letra
-actual/completa, seek hacia tramo medido y regreso al catálogo.141 pruebas pasan.
+actual/completa, seek hacia tramo medido y regreso al catálogo.143 pruebas pasan.
+
+## Elección de letra y motor
+
+En ⋯ Ajustes, «Qué letra mostrar» permite Automático, Solo letra del catálogo o
+Solo transcripción del audio. Transcripción muestra las palabras acústicas sin
+corregirlas con el catálogo ni aplicar su velocidad/desfase. Necesita captura e
+inferencia; un texto observado pasado no se convierte en una frase futura.
+
+«Motor de transcripción local» permite automático, Whisper.cpp GPU Vulkan o
+CrisperWhisper CPU. La selección se guarda. Cambiar motor detiene los procesos
+propios, espera a que el servicio libere su puerto y limpia transcripciones,
+caché y referencias del motor anterior. Whisper explícito sin instalación válida
+falla con mensaje, no cambia silenciosamente a CPU. Crisper CPU está instalado
+pero sus resultados de canto pueden ser peores; no se presenta como GPU.
+
+Regresiones: texto acústico directo con catálogo disponible, cambio a catálogo,
+persistencia de elección y limpieza al cambiar motor.143 pruebas completas pasan.

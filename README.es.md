@@ -129,6 +129,10 @@ La vista dual coloca original y guía en campos separados. Conserva tiempos por
 línea; no inventa tiempos por palabra. La transcripción continua conserva su
 texto original mientras está siendo estimada.
 
+En **⋯ Ajustes** elige qué mostrar: automático, solo catálogo o solo transcripción
+acústica. Puedes seleccionar Whisper GPU o CrisperWhisper CPU; las preferencias
+se conservan. La transcripción directa necesita escuchar y llega con retraso.
+
 ## Transcripción y versiones editadas
 
 Instala Whisper.cpp Vulkan con `bash scripts/setup-whisper-vulkan.sh`. El panel

@@ -331,7 +331,7 @@ class Dashboard(QWidget):
         self.offset.setSingleStep(0.25)
         self.offset.setSuffix(" s")
         self.offset.setToolTip("Adelanta (+) o retrasa (−) las letras. No cambia la música.")
-        self.speed.setRange(0.5, 2)
+        self.speed.setRange(0.25, 2)
         self.speed.setDecimals(3)
         self.speed.setSingleStep(0.01)
         self.speed.setValue(1)
@@ -879,6 +879,8 @@ class Dashboard(QWidget):
         def display_text(line):
             return line["text"] + ("\n" + line["translation"] if line.get("translation") else "")
 
+        catalog_pending = (self.lyric_source == "auto" and source_document is self.document
+                           and not self.automatic_clock and adjustment == (0, 1))
         self.lyric_preview.setText(display_text(current) if current and playback_document else "")
         if self._visible_document is not self._adjusted_document:
             self._visible_document = self._adjusted_document
@@ -888,11 +890,12 @@ class Dashboard(QWidget):
                 return f"{int(minutes):02d}:{seconds:05.2f}"
 
             self.lyric_lines.addItems([
+                f"Por sincronizar · {display_text(line)}" if catalog_pending else
                 f"{timestamp(line['start'])} – {timestamp(line['end'])}  {display_text(line)}"
                 if line.get("end") is not None else f"{timestamp(line['start'])}  {display_text(line)}"
                 for line in lines
             ])
-        row = next((i for i in range(len(lines) - 1, -1, -1) if lines[i]["start"] <= position), -1)
+        row = -1 if catalog_pending else next((i for i in range(len(lines) - 1, -1, -1) if lines[i]["start"] <= position), -1)
         if row != self.lyric_lines.currentRow():
             self.lyric_lines.setCurrentRow(row)
             if row >= 0:
@@ -995,7 +998,7 @@ class Dashboard(QWidget):
         try:
             stored = json.loads(self.settings.value("alignments", "{}"))
             offset, speed = stored.get(self.alignment_key(), [0, 1])
-            if not (-3600 <= offset <= 3600 and .5 <= speed <= 2):
+            if not (-3600 <= offset <= 3600 and .25 <= speed <= 2):
                 return
         except (ValueError, TypeError, AttributeError):
             return

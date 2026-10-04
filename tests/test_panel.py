@@ -102,6 +102,7 @@ def test_worker_result_uses_real_kotonoha_parser_and_receiver(panel):
 
 def test_multiline_follows_clock_and_aligns_selected_line(panel):
     receive(panel)
+    panel.lyric_source = "catalog"
     panel.document = document(
         parse_lrc("[00:01.00]First demo\n[00:04.00]Second demo\n[00:20.00]Third demo"),
         "test",
@@ -412,3 +413,22 @@ def test_no_catalog_shows_crisper_words_with_original_acoustic_times(panel, monk
     assert panel.lyric_preview.text() == "Actual timed words"
     assert panel.link.document["timing"] == "Word"
     assert panel.link.document["lines"][0]["words"][1]["start"] == 11.5
+
+
+
+def test_unverified_catalog_does_not_claim_original_end_as_slowed_time(panel, monkeypatch):
+    monkeypatch.setattr(panel, "start_live", lambda: None)
+    panel.lyric_source = "auto"
+    panel.track = {**TRACK, "title": "Song ULTRA SLOWED", "duration": 192, "position": 140}
+    catalog = document(parse_lrc("[00:10]First phrase\n[02:14]Last original phrase"), "test", "Demo", "Singer")
+    panel.job_event({"finished": True, "result": {"document": catalog}})
+    assert panel.lyric_lines.item(1).text().startswith("Por sincronizar")
+    assert "02:14" not in panel.lyric_lines.item(1).text()
+    assert panel.lyric_lines.currentRow() == -1
+    assert panel.link.document is None
+
+
+def test_ultra_slowed_adjustment_can_reach_real_duration():
+    doc = {"lines": [{"text": "Final phrase", "start": 70, "end": 78.8, "words": []}]}
+    adjusted = adjusted_document(doc, offset=2, speed=.4, duration=192)
+    assert adjusted["lines"][0]["end"] == pytest.approx(192)

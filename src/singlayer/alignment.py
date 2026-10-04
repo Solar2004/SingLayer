@@ -13,7 +13,7 @@ def calibrate(first, second):
         raise ValueError("Marca otra línea posterior al menos 15 segundos después")
     speed = (l2 - l1) / (p2 - p1)
     offset = l1 - p1 * speed
-    if not 0.5 <= speed <= 2 or abs(offset) > 3600:
+    if not 0.25 <= speed <= 2 or abs(offset) > 3600:
         raise ValueError("Referencias incompatibles; vuelve a marcarlas")
     return offset, speed
 
@@ -101,7 +101,7 @@ def align_fragment(transcript, catalog):
             continue
         span = segment["end"] - segment["start"]
         speed = (end - first) / span if span > 0 else 0
-        if not .5 <= speed <= 2:
+        if not .25 <= speed <= 2:
             continue
         # Preserve measured CrisperWhisper word boundaries only for an exact
         # single-line match. Fuzzy matches must not borrow another text's words.

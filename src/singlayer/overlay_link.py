@@ -13,7 +13,7 @@ from PyQt6.QtWebSockets import QWebSocket
 
 
 def adjusted_document(document, offset=0.0, speed=1.0, duration=None):
-    if not math.isfinite(offset) or not math.isfinite(speed) or not 0.5 <= speed <= 2:
+    if not math.isfinite(offset) or not math.isfinite(speed) or not 0.25 <= speed <= 2:
         raise ValueError("Ajuste temporal inválido")
     result = copy.deepcopy(document)
     if result:

@@ -107,3 +107,16 @@ def test_cut_clears_old_clock_and_rebuilds_from_new_section():
     assert len(anchors) == 1
     new = {"lines": [{"text": text, "start": start} for text, start in zip(texts[4:], [70, 90])]}
     assert estimate_clock(new, catalog, anchors) == {"offset": 50, "speed": 1, "anchors": 3}
+
+
+
+def test_ultra_slowed_acoustic_clock_below_half_speed():
+    from singlayer.alignment import estimate_clock
+
+    texts = [f"distinct{index} amber birch cedar dawn elm fern grove hazel" for index in range(3)]
+    catalog = {"lines": [{"text": text, "start": time} for text, time in zip(texts, [10, 18, 26])]}
+    observed = {"lines": [{"text": text, "start": time} for text, time in zip(texts, [20, 40, 60])]}
+    clock = estimate_clock(observed, catalog)
+    assert clock == {"offset": 2, "speed": .4, "anchors": 3}
+    # The same original final timestamp is later in the actual slowed audio.
+    assert (78.8 - clock["offset"]) / clock["speed"] == pytest.approx(192)

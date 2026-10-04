@@ -153,7 +153,7 @@ async def _run_live(data, emit):
             while True:
                 pcm, begin = await pending.get()
                 if not audible(pcm):
-                    emit({"live_status": "Esperando voz · audio en silencio"})
+                    emit({"no_words": True, "live_status": "Esperando voz · audio en silencio"})
                     continue
                 try:
                     document = await transcribe_window(wav_window(pcm), begin)
@@ -168,7 +168,7 @@ async def _run_live(data, emit):
                 if document:
                     emit({"transcript": document, "lag": max(0, current["position"] - document["lines"][-1]["end"])})
                 else:
-                    emit({"live_status": "Sin palabras fiables · esperando otro fragmento"})
+                    emit({"no_words": True, "live_status": "Sin palabras fiables · esperando otro fragmento"})
 
         tasks = [asyncio.create_task(task()) for task in (capture, monitor, infer)]
         try:

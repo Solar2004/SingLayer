@@ -3,6 +3,7 @@
 import io
 import json
 import math
+import re
 import wave
 
 import aiohttp
@@ -79,7 +80,11 @@ def whisper_document(payload, window_start, duration):
             # never spread the leading instrumental silence over lyric tokens.
             start, end = centers[0] / 100, centers[-1] / 100
         text = segment["text"].strip()
-        if not text:
+        if not text or not any(char.isalpha() for char in text):
+            continue
+        if re.fullmatch(r"[\[(]\s*(?:music|instrumental|silence|applause|música)\s*[\])]", text, re.I):
+            continue
+        if float(segment.get("avg_logprob", 0)) < -1:
             continue
         if (not all(math.isfinite(v) for v in (start, end))
                 or not previous <= start < end <= duration + .1

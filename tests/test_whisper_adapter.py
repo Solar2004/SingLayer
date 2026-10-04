@@ -43,3 +43,12 @@ def test_dtw_envelope_excludes_leading_music_without_claiming_word_boundaries():
     assert doc["lines"][0]["start"] == 41.25
     assert doc["lines"][0]["end"] == 42.8
     assert doc["lines"][0]["words"] == []
+
+
+@pytest.mark.parametrize("text", ["...", "♪♫", "[Music]", "(instrumental)"])
+def test_nonvocal_tokens_are_not_lyrics(text):
+    assert whisper_document(payload(text=text), 0, 12) is None
+
+
+def test_low_confidence_segment_is_not_accepted_as_voice():
+    assert whisper_document(payload(avg_logprob=-1.5), 0, 12) is None

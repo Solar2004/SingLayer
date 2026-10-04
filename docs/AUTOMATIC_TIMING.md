@@ -84,7 +84,7 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 143 pruebas completas, Ruff, shell y diff check pasan.
+- 148 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
@@ -109,7 +109,7 @@ La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográf
 y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
 no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
 
-Regresiones específicas y puerta completa:143 pruebas, Ruff y diff check pasan.
+Regresiones específicas y puerta completa:148 pruebas, Ruff y diff check pasan.
 
 ## Contexto de estribillos y cambios de sección
 
@@ -126,7 +126,7 @@ tramos medidos. Detección posterior al reconocimiento, no anticipación del cor
 
 Pruebas de regresión: repetición con/sin contexto, contexto roto por corte,
 invalidez del reloj anterior y reconstrucción con referencias nuevas. Puerta
-completa:143 pruebas. No se ha medido esta mejora contra anotaciones humanas de
+completa:148 pruebas. No se ha medido esta mejora contra anotaciones humanas de
 una nueva matriz de remixes reales.
 
 ## Corrección de letra que desaparecía al finalizar
@@ -139,7 +139,7 @@ con su limitación de retraso. Mantener el catálogo no demuestra que sus tiempo
 sean correctos: la comprobación acústica continúa.
 
 Regresión de UI: búsqueda terminada, fragmento atrasado, conservación de letra
-actual/completa, seek hacia tramo medido y regreso al catálogo.143 pruebas pasan.
+actual/completa, seek hacia tramo medido y regreso al catálogo.148 pruebas pasan.
 
 ## Elección de letra y motor
 
@@ -156,4 +156,24 @@ falla con mensaje, no cambia silenciosamente a CPU. Crisper CPU está instalado
 pero sus resultados de canto pueden ser peores; no se presenta como GPU.
 
 Regresiones: texto acústico directo con catálogo disponible, cambio a catálogo,
-persistencia de elección y limpieza al cambiar motor.143 pruebas completas pasan.
+persistencia de elección y limpieza al cambiar motor.148 pruebas completas pasan.
+
+## Catálogo candidato e instrumental
+
+Esta regla reemplaza la conservación anterior del catálogo en la vista activa:
+la lista ≡ conserva la letra candidata, pero en automático el overlay y la frase
+actual requieren tramos alineados al audio o un reloj acústico calibrado. Una
+búsqueda exitosa no es evidencia de voz. Todas las pistas en automático activan
+contraste acústico. «Solo catálogo» sigue siendo una elección explícita que no
+verifica el audio.
+
+Ventanas sin palabras fiables/silencio invalidan el reloj. El adaptador Whisper
+rechaza puntuación sola, etiquetas Music/Instrumental y segmentos con
+avg_logprob inferior a−1. Reproceso de resultados nativos reales: After Dark que
+solo devolvió «…» ahora produce cero líneas; Night Dancer japonés conserva tres.
+No se garantiza detectar todas las alucinaciones con texto plausible.
+
+Se evaluó Silero VAD6.2.0 a umbrales0.5 y0.1: descartó también canto japonés real.
+NO se activó esa dependencia en producción ni se filtró todo canto como silencio.
+El modelo y herramienta experimental permanecen locales; el instalador no los
+requiere. Evidencia de regresión y puerta completa:148 pruebas, Ruff/diff OK.

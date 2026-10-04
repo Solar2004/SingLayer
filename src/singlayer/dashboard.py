@@ -852,7 +852,15 @@ class Dashboard(QWidget):
             self._adjusted_document = adjusted_document(
                 guided_document, *adjustment, duration=(self.track or {}).get("duration") or None
             )
-        self.link.update(self.track, self._adjusted_document)
+        # A catalog remains available in the list, but automatic playback must
+        # not present an unverified catalog as words actually heard in the audio.
+        playback_document = self._adjusted_document
+        if self.lyric_source == "auto" and not self.automatic_clock:
+            if source_document is not self.live_document or not self.live_document:
+                playback_document = None
+            elif self.live_document.get("source") != "audio-aligned":
+                playback_document = None
+        self.link.update(self.track, playback_document)
         lines = (self._adjusted_document or {}).get("lines", [])
         position = (self.track or {}).get("position", 0)
         current = next((line for line in reversed(lines) if line["start"] <= position), None)
@@ -862,7 +870,7 @@ class Dashboard(QWidget):
         def display_text(line):
             return line["text"] + ("\n" + line["translation"] if line.get("translation") else "")
 
-        self.lyric_preview.setText(display_text(current) if current else "")
+        self.lyric_preview.setText(display_text(current) if current and playback_document else "")
         if self._visible_document is not self._adjusted_document:
             self._visible_document = self._adjusted_document
             self.lyric_lines.clear()
@@ -1107,6 +1115,12 @@ class Dashboard(QWidget):
                     elif "fatal" in event:
                         self.activity.setText(event["fatal"])
                         self.live_retry_at = time.monotonic() + 30
+                    elif event.get("no_words"):
+                        self.automatic_clock = None
+                        self.clock_anchors.clear()
+                        self.live_document = None
+                        self.publish()
+                        self.activity.setText("Sin palabras fiables en el audio · letra disponible sin verificar")
                     elif "live_status" in event:
                         self.activity.setText(event["live_status"])
                 except (ValueError, KeyError, TypeError):
@@ -1272,17 +1286,7 @@ class Dashboard(QWidget):
             self.live_document = self.live_cache.get(self.live_cache_key())
             self.publish()
             self.reading_changed()
-            from .workflow import search_identity
-
-            self.live_enabled = (not self.document
-                                 or search_identity(self.track or {"title": ""})["edited"]
-                                 or not (self.track or {}).get("artist", "").strip()
-                                 or (self.track or {}).get("source") == "SoundCloud"
-                                 or bool(result.get("recognized"))
-                                 or any(line["start"] >= (self.track or {}).get("duration", 0)
-                                        for line in (self.document or {}).get("lines", [])
-                                        if (self.track or {}).get("duration", 0) > 0)
-                                 or len(self.catalog_candidates) > 1)
+            self.live_enabled = self.lyric_source != "catalog"
             if self.lyric_source == "transcript":
                 self.live_enabled = True
             elif self.lyric_source == "catalog":

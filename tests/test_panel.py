@@ -194,7 +194,7 @@ def test_last_resort_enables_live_and_reliable_catalog_does_not(panel, monkeypat
     assert starts[-1] is True
     doc = document(parse_lrc("[00:01]Original demonstration line"), "test", "Demo", "Singer")
     panel.job_event({"finished": True, "result": {"document": doc}})
-    assert starts[-1] is False
+    assert starts[-1] is True
 
 
 def test_sped_up_catalog_enables_acoustic_alignment(panel, monkeypatch):
@@ -326,12 +326,14 @@ def test_delayed_audio_does_not_remove_full_catalog_after_search(panel, monkeypa
     monkeypatch.setattr(panel, "start_live", lambda: None)
     catalog = document(parse_lrc("[00:01]First original phrase\n[00:35]Current original phrase\n[01:00]Future original phrase"), "test", "Demo", "Singer")
     panel.job_event({"finished": True, "result": {"document": catalog}})
-    panel.live_document = {"source": "whisper-vulkan", "lines": [
+    panel.live_document = {"source": "audio-aligned", "lines": [
         {"text": "Past acoustic phrase", "start": 4, "end": 9, "words": [], "translation": ""}]}
     panel.publish()
     assert len(panel._adjusted_document["lines"]) == 3
-    assert panel.lyric_preview.text() == "Current original phrase"
+    assert panel.lyric_preview.text() == ""
     assert panel._source_document is catalog
+    assert panel.link.document is None  # Candidate lyrics must not overlay instrumental audio.
+    assert panel.lyric_lines.count() == 3  # Still available for review/manual selection.
     # Seeking into a measured interval should still use its acoustic times.
     panel.track = {**panel.track, "position": 6}
     panel.publish()
@@ -339,7 +341,7 @@ def test_delayed_audio_does_not_remove_full_catalog_after_search(panel, monkeypa
     assert panel._source_document is panel.live_document
     panel.track = {**panel.track, "position": 42}
     panel.publish()
-    assert panel.lyric_preview.text() == "Current original phrase"
+    assert panel.lyric_preview.text() == ""
 
 
 def test_explicit_transcription_keeps_raw_words_even_with_catalog(panel, monkeypatch):

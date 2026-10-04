@@ -54,11 +54,43 @@ def unique_match(text, lines):
     return start, size, score
 
 
+def contextual_matches(transcript, catalog):
+    """Resolve repeats only from two independent phrases in this audio window."""
+    segments = transcript["lines"]
+    matches = [unique_match(segment["text"], catalog["lines"]) for segment in segments]
+    anchors = [(segment["start"], catalog["lines"][match[0]]["start"])
+               for segment, match in zip(segments, matches)
+               if match and match[1] == 1 and match[2] >= .85]
+    anchors.sort()
+    if len(anchors) < 2:
+        return matches
+    try:
+        offset, speed = calibrate(anchors[0], anchors[-1])
+    except ValueError:
+        return matches
+    if any(abs((original - offset) / speed - position) > .75 for position, original in anchors):
+        return matches
+    for index, segment in enumerate(segments):
+        if matches[index]:
+            continue
+        # Never extend a contextual inference beyond the measured unique anchors.
+        if not anchors[0][0] <= segment["start"] <= anchors[-1][0]:
+            continue
+        indices = [i for i, line in enumerate(catalog["lines"])
+                   if abs((line["start"] - offset) / speed - segment["start"]) <= 1.5]
+        # Only single-line repeats: joining a filtered, noncontiguous catalog
+        # would manufacture neighboring phrases that never occurred together.
+        if len(indices) == 1:
+            found = unique_match(segment["text"], [catalog["lines"][indices[0]]])
+            if found and found[1] == 1 and found[2] >= .85:
+                matches[index] = (indices[0], 1, found[2])
+    return matches
+
+
 def align_fragment(transcript, catalog):
     """Piecewise mapping only inside observed phrases; never extrapolate across cuts."""
     result = []
-    for segment in transcript["lines"]:
-        match = unique_match(segment["text"], catalog["lines"])
+    for segment, match in zip(transcript["lines"], contextual_matches(transcript, catalog)):
         if not match:
             continue
         start, size, _ = match
@@ -105,6 +137,14 @@ def estimate_clock(transcript, catalog, anchors=None):
         index = match[0]
         original = catalog["lines"][index]["start"]
         point = (segment["start"], original)
+        previous = sorted(anchors.values())
+        if len(previous) >= 3:
+            try:
+                old_offset, old_speed = calibrate(previous[0], previous[-1])
+                if abs((original - old_offset) / old_speed - point[0]) > .75:
+                    anchors.clear()  # Begin measuring the new section after a cut/speed change.
+            except ValueError:
+                pass
         if index in anchors and abs(anchors[index][0] - point[0]) > .75:
             anchors.clear()  # A changed acoustic occurrence invalidates the old clock.
         anchors[index] = point

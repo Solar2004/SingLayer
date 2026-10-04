@@ -79,3 +79,31 @@ def test_clip_beginning_at_original_middle_maps_to_clip_clock():
     clock = estimate_clock(observed, catalog)
     assert clock["speed"] == pytest.approx(1.2)
     assert (114 - clock["offset"]) / clock["speed"] == pytest.approx(22)
+
+
+
+def test_repeated_chorus_uses_unique_surrounding_phrases_only():
+    from singlayer.alignment import contextual_matches
+
+    texts = ["first uniquely identifiable verse phrase here", "we keep singing this same chorus",
+             "last distinctive verse phrase around the chorus", "we keep singing this same chorus"]
+    catalog = {"lines": [{"text": text, "start": start} for text, start in zip(texts, [30, 40, 50, 90])]}
+    observed = {"lines": [{"text": text, "start": start} for text, start in zip(texts[:3], [2, 12, 22])]}
+    assert contextual_matches(observed, catalog)[1] == (1, 1, 1.0)
+    assert contextual_matches({"lines": [observed["lines"][1]]}, catalog) == [None]
+    observed["lines"][2]["start"] = 8  # A cut destroys the coherent surrounding clock.
+    assert contextual_matches(observed, catalog)[1] is None
+
+
+def test_cut_clears_old_clock_and_rebuilds_from_new_section():
+    from singlayer.alignment import estimate_clock
+
+    texts = [f"distinct{index} amber birch cedar dawn elm fern grove hazel" for index in range(6)]
+    catalog = {"lines": [{"text": text, "start": start} for text, start in zip(texts, [0, 20, 40, 100, 120, 140])]}
+    anchors = {}
+    old = {"lines": [{"text": text, "start": start} for text, start in zip(texts[:3], [0, 20, 40])]}
+    assert estimate_clock(old, catalog, anchors)["offset"] == 0
+    assert estimate_clock({"lines": [{"text": texts[3], "start": 50}]}, catalog, anchors) is None
+    assert len(anchors) == 1
+    new = {"lines": [{"text": text, "start": start} for text, start in zip(texts[4:], [70, 90])]}
+    assert estimate_clock(new, catalog, anchors) == {"offset": 50, "speed": 1, "anchors": 3}

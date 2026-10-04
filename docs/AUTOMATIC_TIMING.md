@@ -84,7 +84,7 @@ Pins:
   layer shell activo y prueba de ciclos de blur aprobada. No prueba apariencia en
   cada compositor/configuración del usuario.
 - Apagado controlado del adaptador comprobó que el proceso GPU hijo se detuvo.
-- 138 pruebas completas, Ruff, shell y diff check pasan.
+- 140 pruebas completas, Ruff, shell y diff check pasan.
 
 After Dark muy muffled y Honeypie slowed/reverb siguieron produciendo resultados
 incompletos en las muestras adicionales. Se conserva corrección manual y estado
@@ -109,4 +109,22 @@ La comparación normaliza Unicode decorativo, puntuación, apóstrofos tipográf
 y caracteres invisibles dentro de palabras, conservando la letra visible. Esto
 no garantiza reconocer audio inaudible o cualquier escritura arbitraria.
 
-Regresiones específicas y puerta completa:138 pruebas, Ruff y diff check pasan.
+Regresiones específicas y puerta completa:140 pruebas, Ruff y diff check pasan.
+
+## Contexto de estribillos y cambios de sección
+
+Un estribillo repetido puede alinearse cuando dos frases únicas de la misma
+ventana lo rodean, están separadas al menos15s y forman un reloj coherente. Solo
+se acepta una ocurrencia dentro de1.5s del tiempo previsto y con texto compatible.
+Sin ese contexto se mantiene la transcripción medida. No se usa el reloj antiguo
+para elegir un estribillo después de un corte.
+
+Una nueva referencia única incompatible con el reloj establecido lo invalida y
+vacía las referencias antiguas. La nueva sección requiere nuevamente tres
+referencias para estimar su velocidad/desfase. Durante esa espera se muestran
+tramos medidos. Detección posterior al reconocimiento, no anticipación del corte.
+
+Pruebas de regresión: repetición con/sin contexto, contexto roto por corte,
+invalidez del reloj anterior y reconstrucción con referencias nuevas. Puerta
+completa:140 pruebas. No se ha medido esta mejora contra anotaciones humanas de
+una nueva matriz de remixes reales.

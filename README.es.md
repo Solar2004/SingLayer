@@ -20,11 +20,10 @@ bash scripts/setup.sh --engines
 .venv/bin/singlayer app
 ```
 
-El panel también ofrece **Instalar motores** cuando faltan ShazamIO, syncedlyrics
-o NumPy. Usa `uv` y PyPI, sin sudo. Necesita conexión a Internet. FFmpeg y `parec`
-son dependencias del sistema para reconocer audio y mostrar el espectro; no se
-instalan automáticamente. SongRec es opcional: si existe se usa como proceso
-separado, y si no se utiliza ShazamIO.
+La instalación incluye ShazamIO, syncedlyrics y NumPy por defecto. En instalaciones
+anteriores, el primer inicio prepara los componentes que falten mediante `uv` y
+PyPI, sin botón de instalación ni sudo. Necesita Internet. `pactl` y `parec` son
+dependencias del sistema. SongRec es opcional; sin él se utiliza ShazamIO.
 
 ## Navegador y controles
 
@@ -33,16 +32,48 @@ crea un adaptador personalizado con puerto **8975** y actívalo. Desactiva
 **Use desktop players** para evitar que nuestro MPRIS vuelva a entrar en la
 extensión. Recarga SoundCloud después de instalarla y reproduce una canción.
 
-- **Conectar** inicia el puente y busca letras de la canción recibida.
-- **Letras** abre o cierra el overlay Kotonoha.
-- **Buscar** corrige canción/artista y vuelve a consultar los proveedores.
-- **Shazam** solicita reconocimiento de audio, con permiso y reproducción activa.
-- **Sincronizar** permite hacer doble clic en la línea que estás cantando.
-- **Desfase / Velocidad** ajustan la letra, nunca la reproducción del navegador.
-- **■** detiene solamente los procesos iniciados por esta ventana.
+La aplicación inicia el puente, el overlay y la búsqueda automáticamente. El panel
+muestra portada, espectro, canción, letra actual y un único estado de búsqueda.
+El menú **⋯** contiene búsqueda manual, alineación, desfase, velocidad y modos de
+pronunciación. Cerrar detiene solamente los procesos propios de esta ventana.
 
-La portada llega como imagen binaria desde la extensión; no se descargan URLs
-arbitrarias de las páginas. Si no hay portada, se muestra un marcador neutro.
+**≡** muestra la letra completa con texto más pequeño y desplazamiento automático.
+Un doble clic sobre una línea la alinea con la posición actual de la canción.
+**⋯ → Elegir otra versión de la letra** consulta alternativas de LRCLIB reutilizando
+la búsqueda de Kotonoha; doble clic selecciona una. Las búsquedas automáticas de
+SoundCloud prueban también el orden canción-artista si falla artista-canción.
+Los errores de captura/proveedor ya no se presentan como ausencia de letras.
+
+Para una versión slowed/sped up con velocidad constante, abre **⋯ → Calibrar
+slowed / sped up con dos líneas**. Haz doble clic en una línea cuando empiece a
+sonar; marca otra más adelante, al menos 15 segundos después. Se calculan desfase
+y velocidad a partir de esas dos referencias y se aplican también al overlay y
+la guía fonética. **Restablecer sincronización** vuelve a los tiempos originales.
+No modifica la música. Los cortes, reordenaciones o cambios de velocidad internos
+de un remix necesitan nuevas referencias: dos puntos no resuelven esos casos.
+
+La pronunciación se calcula localmente, conserva líneas vacías y deduplica
+estribillos. **Reintentar pronunciación** está en ⋯. Es una guía aproximada;
+los idiomas sin soporte conservan el original.
+
+La búsqueda genera hasta cuatro variantes deduplicadas: metadatos, Unicode
+decorativo normalizado, orden invertido y título sin uploader. La limpieza no
+elimina palabras arbitrarias que podrían formar parte del título. Los proveedores
+de Kotonoha mantienen su comparación aproximada de candidatos.
+
+Para SoundCloud/remixes, una letra encontrada por título no cancela la comprobación
+de audio. Se contrastan hasta tres fragmentos sucesivos de 12 segundos, sin mover
+la reproducción. Dos identificaciones con el mismo ID de Shazam corroboran la
+identidad; sin ID se exige gran similitud de título y artista. La interfaz informa
+cuántas muestras coinciden, no un porcentaje de exactitud. Si no hay corroboración,
+la letra por metadatos queda como candidata, no como resultado verificado.
+Esto no garantiza timing de remixes ni acceso a partes de la canción todavía no
+reproducidas. Un fallo de captura detiene esa vía; no provoca capturas del escritorio.
+
+La portada llega desde la extensión. Si hay URL pero falla el transporte binario,
+se admite descarga HTTPS desde cuatro CDN de música explícitamente permitidas,
+sin redirecciones y con límites de tamaño. No se descargan URLs arbitrarias.
+Si falta también la URL se muestra un marcador neutro, no una portada inventada.
 Los iconos vienen del tema del sistema. WebNowPlaying no diferencia de forma
 fiable Brave/Chrome/Vivaldi: el selector permite indicar la marca manualmente.
 El botón de extensión se oculta cuando hay conexión. Sin conexión se ofrece
@@ -54,7 +85,7 @@ LRCLIB, NetEase y KuGou se consultan mediante el código existente de Kotonoha.
 Si no encuentran letras, syncedlyrics aporta Musixmatch y Megalobiz. Genius queda
 como alternativa de texto sin tiempos, visible en el panel, no como karaoke falso.
 
-Con **Audio del sistema** activado, el primer reconocimiento puede solaparse con
+Durante la reproducción, el reconocimiento puede solaparse automáticamente con
 la búsqueda. Hay un máximo de cuatro operaciones simultáneas y tres fragmentos
 de 12 segundos por búsqueda; los fragmentos se capturan en secuencia. Al obtener
 letras se cancela el trabajo sobrante. Pausar audio durante ese flujo, cambiar
@@ -62,19 +93,48 @@ de pista, detener o cerrar cancela la búsqueda y sus procesos. Las consultas de
 la misma identidad se comparten; se conservan hasta 32 resultados en memoria
 durante la sesión. Cada operación tiene tiempo límite y hay un límite global.
 
-Los puntos de progreso distinguen búsqueda activa, resultado, ausencia,
-dependencia faltante, error y operación omitida. «Letra encontrada» **no prueba**
+La barra muestra actividad real, no porcentajes de exactitud inventados.
+«Letra encontrada» **no prueba**
 que sea la versión correcta o esté sincronizada con un remix.
 
 ## Audio y privacidad
 
-La captura está apagada al abrir la app. **Audio del sistema** utiliza el monitor
-de salida de PulseAudio/PipeWire, nunca el micrófono. Incluye cualquier sonido
-que salga por esa salida, no únicamente SoundCloud: evita llamadas u otro audio
-privado durante el reconocimiento. Shazam recibe huellas de audio; los proveedores
+La captura selecciona un flujo de reproducción del navegador mediante
+`parec --monitor-stream`, nunca el micrófono ni la mezcla completa del escritorio.
+Si hay varios flujos ambiguos, no graba. Un navegador puede mezclar varias pestañas
+en un mismo flujo: esta solución no garantiza aislamiento por pestaña; evita
+llamadas u otro audio privado en ese navegador durante el reconocimiento.
+Shazam recibe huellas de audio; los proveedores
 de letras reciben canción y artista. Los fragmentos no se conservan: con SongRec
 el WAV temporal se elimina al acabar; con ShazamIO se entrega en memoria.
 Las barras son un espectro FFT real, no una animación aleatoria.
+
+## Pronunciación local
+
+En **⋯**, selecciona **Pronunciación española · local** o **Original +
+pronunciación · local**. Usa diccionarios eSpeak NG para inglés, francés, alemán,
+italiano, portugués y ruso; pykakasi para japonés. El español se conserva.
+No envía letras ni audio a un servicio de pronunciación. La lectura es aproximada;
+la detección de idioma y las lecturas de kanji pueden equivocarse.
+
+La vista dual coloca original y guía en campos separados. Conserva tiempos por
+línea; no inventa tiempos por palabra. La transcripción continua conserva su
+texto original mientras está siendo estimada.
+
+## Transcripción y versiones editadas
+
+Instala el motor CrisperWhisper 2.0 con `bash scripts/setup-crisper.sh`. El backend actual es CPU int8; la vía rápida CUDA no está disponible para la RX590. El panel inicia el servidor
+persistente cuando hace falta transcribir o contrastar una versión editada.
+
+Captura ventanas de 12 segundos del flujo del navegador, cada 8 segundos, y
+mantiene una sola ventana pendiente. Descarta audio al pausar, saltar o cambiar de
+pista. Un resultado con tiempos inválidos se descarta y se espera otro fragmento.
+La captura inicial añade retraso: CrisperWhisper no conoce palabras futuras.
+
+La alineación automática compara frases inequívocas con el catálogo y ajusta
+solo esos fragmentos, incluso si aparecen en otro orden. Rechaza frases cortas y
+estribillos repetidos ambiguos. Las voces alteradas, mezcladas o tapadas por música
+pueden requerir el ajuste manual. Véase `docs/CRISPERWHISPER.md` y `HANDOFF.md`.
 
 ## Compatibilidad y límites comprobados
 

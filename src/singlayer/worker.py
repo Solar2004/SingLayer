@@ -2,14 +2,18 @@
 
 import asyncio
 import importlib.util
+import io
 import json
 import shutil
 import signal
 import sys
 import tempfile
+import wave
 from dataclasses import asdict
 from pathlib import Path
 
+from .browser_audio import capture_args, select_stream
+from .diagnostics import record
 from .workflow import resolve
 
 
@@ -111,37 +115,92 @@ async def provider_search(data):
     return {"document": document(parse_lrc(result), provider, data["title"], data.get("artist", ""))}
 
 
-async def recognize():
-    songrec = shutil.which("songrec")
-    if not songrec and importlib.util.find_spec("shazamio") is None:
-        return {"missing": True, "error": "Falta SongRec o ShazamIO. Instala los motores."}
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        return {"missing": True, "error": "Falta FFmpeg para capturar la salida de audio"}
-    # Explicit monitor input: never default to a microphone. No audio is retained.
-    audio = await command(
-        [
-            ffmpeg,
-            "-nostdin",
-            "-v",
-            "error",
-            "-f",
-            "pulse",
-            "-i",
-            "@DEFAULT_MONITOR@",
-            "-t",
-            "12",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-f",
-            "wav",
-            "pipe:1",
-        ],
-        timeout=17,
-        limit=600_000,
+async def alternatives(data):
+    import re
+
+    import aiohttp
+    from kotonoha.lyrics.lrclib import search_artifacts
+    from kotonoha.lyrics.match import TrackMetadata
+    from kotonoha.lyrics.title_grammar import base_title
+
+    from .workflow import search_identity
+
+    track = data["track"]
+    identity = search_identity(track)
+    titles = [identity["title"]]
+    if track.get("source") == "SoundCloud":
+        titles += [base_title(part) for part in re.split(r"\s+[-–—]\s+", track["title"], maxsplit=1)]
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=18)) as session:
+        results = await asyncio.gather(
+            *(search_artifacts(session, TrackMetadata(title, "")) for title in dict.fromkeys(titles)),
+            return_exceptions=True,
+        )
+    documents = []
+    for result in results:
+        if isinstance(result, BaseException):
+            continue
+        for artifact in result:
+            doc = document(artifact.lines, "lrclib", artifact.title, artifact.artist)
+            if doc and doc not in documents:
+                documents.append(doc)
+    return {"documents": documents[:20], "failed": all(isinstance(r, BaseException) for r in results)}
+
+
+async def audio_target(title=""):
+    inputs, sinks = await asyncio.gather(
+        command(["pactl", "-f", "json", "list", "sink-inputs"], timeout=3),
+        command(["pactl", "-f", "json", "list", "sinks"], timeout=3),
     )
+    return select_stream(json.loads(inputs), json.loads(sinks), title)
+
+
+async def browser_sample(target):
+    process = await asyncio.create_subprocess_exec(
+        "parec",
+        *capture_args(target),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        pcm = await asyncio.wait_for(process.stdout.readexactly(12 * 16000 * 2), 17)
+    finally:
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), 2)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+    out = io.BytesIO()
+    with wave.open(out, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(pcm)
+    return out.getvalue()
+
+
+async def recognize(data=None):
+    songrec = shutil.which("songrec")
+    root = Path(__file__).resolve().parents[2]
+    isolated = root / ".build/recognizer/bin/python"
+    python = str(isolated) if isolated.is_file() else sys.executable
+    if not songrec and not isolated.is_file() and importlib.util.find_spec("shazamio") is None:
+        return {"missing": True, "error": "Falta SongRec o ShazamIO. Instala los motores."}
+    if not songrec:
+        # Native modules can crash the interpreter despite find_spec succeeding.
+        # Probe in isolation before recording any audio.
+        try:
+            await command([python, "-c", "from shazamio import Shazam"], timeout=10)
+        except (RuntimeError, TimeoutError):
+            return {
+                "missing": True,
+                "error": "ShazamIO no puede iniciarse con este Python. Instala SongRec o un motor compatible.",
+            }
+    target = await audio_target((data or {}).get("title", ""))
+    if not target:
+        return {"missing": True, "error": "No se puede aislar el audio del navegador"}
+    audio = await browser_sample(target)
     if songrec:
         with tempfile.TemporaryDirectory(prefix="singlayer-recognition-") as directory:
             path = Path(directory) / "sample.wav"
@@ -149,13 +208,17 @@ async def recognize():
             raw = await command([songrec, "audio-file-to-recognized-song", str(path)], timeout=22)
             result = json.loads(raw)
     else:
-        from shazamio import Shazam
-
-        async with Shazam() as shazam:
-            result = await asyncio.wait_for(shazam.recognize(audio), 22)
+        raw = await command([python, str(root / "scripts/recognize_audio.py")], data=audio, timeout=25)
+        result = json.loads(raw)
+    if result.get("fatal"):
+        raise RuntimeError(result["fatal"])
     track = result.get("track") or {}
     # Match offsets/skews are not treated as a reliable karaoke clock.
-    return {"title": track.get("title", ""), "artist": track.get("subtitle", "")}
+    return {
+        "title": track.get("title", ""),
+        "artist": track.get("subtitle", ""),
+        "recording_id": str(track.get("key", "")),
+    }
 
 
 async def invoke(action, data, timeout):
@@ -169,10 +232,22 @@ async def invoke(action, data, timeout):
 
 
 async def main_async(action, data):
-    if action == "provider":
+    if action == "live":
+        from .live_transcription import run_live
+
+        await run_live(data, emit)
+    elif action == "provider":
         emit(await provider_search(data))
     elif action == "recognize":
-        emit(await recognize())
+        emit(await recognize(data))
+    elif action == "audio-target":
+        emit({"target": await audio_target(data.get("title", ""))})
+    elif action == "pronunciation":
+        from .pronunciation import generate
+
+        emit(await generate(data["document"]))
+    elif action == "alternatives":
+        emit(await alternatives(data))
     elif action == "resolve":
         result = await resolve(
             data["track"],
@@ -187,7 +262,7 @@ async def main_async(action, data):
 
 
 def main():
-    data = json.loads(sys.stdin.buffer.read(65536))
+    data = json.loads(sys.stdin.buffer.read(262144))
 
     async def run():
         task = asyncio.current_task()
@@ -198,7 +273,11 @@ def main():
         asyncio.run(run())
     except asyncio.CancelledError:
         pass
+    except TimeoutError:
+        record(sys.argv[1], "TimeoutError")
+        emit({"fatal": "Tiempo de espera agotado: el servicio no respondió. Revisa la conexión y reintenta."})
     except Exception as error:
+        record(sys.argv[1], type(error).__name__, status=getattr(error, "status", None))
         emit({"fatal": f"{type(error).__name__}: {error}"[:500]})
 
 

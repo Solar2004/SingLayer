@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("kotonoha")
 
-from singlayer.workflow import resolve, search_identity
+from singlayer.workflow import resolve, same_recording, search_candidates, search_identity
 
 TRACK = {"title": "Original demo", "artist": "Singer", "duration": 180}
 
@@ -112,3 +112,95 @@ async def test_cancelled_track_cancels_every_operation():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert not active
+
+
+@pytest.mark.asyncio
+async def test_soundcloud_song_artist_order_retried():
+    calls = []
+
+    async def invoke(action, data, timeout):
+        calls.append(data)
+        if data.get("title") == "Bimbo Doll" and data.get("artist") == "Tila tsoli":
+            return {"document": {"source": data["provider"]}}
+        return {}
+
+    result = await resolve(
+        {
+            "title": "Bimbo Doll - Tila tsoli (sped up x nightcore)",
+            "artist": "Uploader",
+            "source": "SoundCloud",
+        },
+        invoke,
+        lambda e: None,
+    )
+    assert result["document"]
+    assert any(d["title"] == "Bimbo Doll" for d in calls)
+
+
+def test_decorative_titles_and_uploader_fallback_are_bounded():
+    variants = search_candidates(
+        {"title": "★ Ｓｉｎｇｅｒ - Ｓｏｎｇ (slowed).mp3", "artist": "Uploader", "source": "SoundCloud"}
+    )
+    assert len(variants) <= 4
+    assert any(v["artist"] == "Singer" and v["title"] == "Song" for v in variants)
+    assert any(v["artist"] == "" for v in variants)
+
+
+def test_recording_id_overrides_similar_names():
+    a = {"title": "Demo", "artist": "Singer", "recording_id": "1"}
+    assert not same_recording(a, {**a, "recording_id": "2"})
+    assert same_recording(a, {**a, "title": "Different display"})
+
+
+@pytest.mark.asyncio
+async def test_soundcloud_metadata_does_not_cancel_audio_consensus():
+    calls = []
+
+    async def invoke(action, data, timeout):
+        calls.append(action)
+        if action == "recognize":
+            await asyncio.sleep(0.01)
+            return {"title": "True song", "artist": "True singer", "recording_id": "123"}
+        return {"document": {"source": data["provider"], "title": data["title"]}}
+
+    result = await resolve({**TRACK, "source": "SoundCloud"}, invoke, lambda e: None, audio_allowed=True)
+    assert calls.count("recognize") == 2
+    assert result["document"]["title"] == "True song"
+    assert result["evidence"] == {"matches": 2, "samples": 2, "confirmed": True}
+
+
+@pytest.mark.asyncio
+async def test_conflicting_samples_are_not_confirmed_and_all_three_tried():
+    count = 0
+
+    async def invoke(action, data, timeout):
+        nonlocal count
+        if action == "recognize":
+            count += 1
+            return {"title": f"Song {count}", "artist": "Singer", "recording_id": str(count)}
+        return {"document": {"source": data["provider"]}}
+
+    result = await resolve({**TRACK, "source": "SoundCloud"}, invoke, lambda e: None, audio_allowed=True)
+    assert count == 3
+    assert not result["evidence"]["confirmed"]
+
+
+@pytest.mark.parametrize("title,artist,expected", [
+    ("night changes (Sped Up)", "andie._", ("night changes", "")),
+    ("night dancer - imase (sped up)", "altvile", ("night dancer", "imase")),
+    ("𝔗𝔥𝔢𝔪 𝔠𝔥𝔞𝔫𝔤𝔢𝔰 - 𝔱𝔥𝔲𝔫𝔡𝔢𝔯𝔠𝔞𝔱 (𝔰𝔭𝔢𝔡 𝔲𝔭)", "KISMET", ("Them changes", "thundercat")),
+    ("After Dark - Mr.Kitty (Slowed, pitched down and extra reverb)", "Transmission", ("After Dark", "Mr.Kitty")),
+    ("mr.kitty - after dark (slowed+reverb+muffled)", "idk anymore", ("after dark", "mr.kitty")),
+    ("Artist - Song speed up", "uploader", ("Song", "Artist")),
+])
+def test_observed_soundcloud_variants(title, artist, expected):
+    track = {"title": title, "artist": artist, "source": "SoundCloud", "duration": 300}
+    candidates = search_candidates(track)
+    assert any((c["title"].casefold(), c["artist"].casefold()) == tuple(x.casefold() for x in expected) for c in candidates)
+    assert search_identity(track)["edited"]
+    assert all(c.get("duration") is None for c in candidates)
+@pytest.mark.parametrize("title", ["Slow Dancing in the Dark", "Dancing Slow", "The Remix Song"])
+def test_catalog_cleaning_preserves_legitimate_titles(title):
+    from singlayer.workflow import catalog_text
+
+    assert catalog_text(title) == title

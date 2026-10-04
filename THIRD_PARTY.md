@@ -29,3 +29,25 @@ Wayland blur wrapper unchanged. It sends source-neutral documents using Kotonoha
 documented adapter protocol. Browser icons come from the user's installed icon theme.
 NumPy supplies FFT processing. FFmpeg and `parec` are separate system executables.
 Library licenses do not grant rights to redistribute providers' lyric catalogs.
+
+Local Whisper installation uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+(MIT), pinned to `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`, and the
+multilingual Whisper base model distributed by its maintainers (MIT). Vulkan
+builds use Khronos Vulkan-Headers (Apache-2.0/MIT) and SPIRV-Headers (MIT),
+with original license files retained in `.build/`. Scripts reuse the installed
+Vulkan loader and driver; they do not redistribute or replace the driver.
+
+Local pronunciation uses espeakng-loader 0.2.4, which loads eSpeak NG
+(GPL-3.0-or-later), langid 1.1.6 (BSD), and pykakasi 2.3.0
+(GPL-3.0-or-later). These libraries retain their upstream licenses; SingLayer's
+MIT license does not relicense them. Distribution of a combined application must
+account for the GPL dependencies and include corresponding license/source
+obligations. The ShazamIO fallback runs in a separate Python 3.12 environment to
+avoid a reproduced native-extension crash on Python 3.14.
+
+Current ASR integration is [CrisperWhisper2.0](https://github.com/nyrahealth/CrisperWhisper),
+code MIT, with its CTranslate2 fork (MIT) and Transformers/PyTorch conversion
+runtime retaining their licenses. **The2.0 model weights are under Nyra Health
+Non-Commercial Research License, not MIT**; commercial use requires appropriate
+licensing. Models are downloaded during setup, not bundled. The earlier
+whisper.cpp benchmark above is historical and is no longer the active runtime.

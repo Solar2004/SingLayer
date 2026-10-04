@@ -1,4 +1,4 @@
-"""Real FFT bars from the default speaker monitor. Never open a microphone."""
+"""Low-latency FFT of one explicitly selected browser stream."""
 
 import shutil
 import time
@@ -7,11 +7,13 @@ from PyQt6.QtCore import QProcess, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import QWidget
 
+from .browser_audio import capture_args
+
 
 def spectrum(pcm, bands=32):
     import numpy as np
 
-    samples = np.frombuffer(pcm[-8192:], dtype="<i2").astype(float) / 32768
+    samples = np.frombuffer(pcm[-2048:], dtype="<i2").astype(float) / 32768
     if len(samples) < 1024:
         return [0.0] * bands
     power = abs(np.fft.rfft(samples * np.hanning(len(samples)))) / len(samples)
@@ -38,21 +40,21 @@ class AudioMeter(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.draw_frame)
         self.timer.start(60)
-        self.setToolTip("Espectro real de la salida de audio del sistema. No es un micrófono.")
+        self.setToolTip("Audio aislado del navegador; nunca el micrófono ni la mezcla del escritorio.")
 
-    def start(self):
+    def start(self, target=None):
+        if not target:
+            return
         if self.process.state() != QProcess.ProcessState.NotRunning:
             return
         if not shutil.which("parec"):
             self.failure.emit("Falta parec (pulseaudio-utils / libpulse)")
             return
-        self.process.start(
-            "parec", ["--device=@DEFAULT_MONITOR@", "--format=s16le", "--rate=16000", "--channels=1"]
-        )
+        self.process.start("parec", capture_args(target))
 
     def read(self):
         self.pcm.extend(bytes(self.process.readAllStandardOutput()))
-        self.pcm = self.pcm[-8192:]
+        self.pcm = self.pcm[-2048:]
         self.last_audio = time.monotonic()
 
     def draw_frame(self):

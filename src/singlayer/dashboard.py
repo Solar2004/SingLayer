@@ -23,8 +23,8 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QImageReader, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -44,8 +44,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .alignment import calibrate
+from .artwork import safe_cover_url
 from .audio_meter import AudioMeter
+from .diagnostics import log_path, record
 from .overlay_link import OverlayLink, adjusted_document, managed_environment, snapshot
+from .pronunciation import apply_guide
 
 ROOT = Path(__file__).resolve().parents[2]
 ICONS = {
@@ -55,15 +59,6 @@ ICONS = {
     "Firefox": "firefox",
     "Vivaldi": "vivaldi",
     "Edge": "microsoft-edge",
-}
-STATES = {
-    "running": "◌",
-    "done": "●",
-    "empty": "○",
-    "missing": "!",
-    "error": "!",
-    "warning": "!",
-    "skipped": "–",
 }
 
 
@@ -99,23 +94,45 @@ class Dashboard(QWidget):
         self.setWindowIcon(QIcon.fromTheme("audio-headphones"))
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.resize(860, 620)
-        self.setMinimumSize(780, 580)
+        self.resize(820, 450)
+        self.setMinimumSize(740, 420)
         self.settings = QSettings("SingLayer", "Panel")
+        self.closing = False
         self.track = self.document = self.job = self.cover_reply = self.blur = None
+        self.live_job = None
+        self.live_epoch = 0
+        self.live_enabled = False
+        self.live_retry_at = 0
+        self.clock_observed_at = None
+        self.live_document = None
+        self.catalog_candidates = []
+        self.crisper = QProcess(self)
+        self.crisper.setStandardOutputFile(QProcess.nullDevice())
+        self.crisper.setStandardErrorFile(str(ROOT / ".build/crisper-server.log"))
         self.plain = self.bridge_error = ""
         self.wanted = self.online = self.pending = self.overlay_attempted = False
         self.cover_revision = None
+        self.cover_attempts = {}
         self.job_epoch = 0
         self.events = {}
         self.retiring_jobs = set()
         self.result_cache = {}
+        self.guide = None
+        self.guide_cache = {}
+        self.guide_key = None
+        self.calibration_anchor = None
+        self.calibrating = False
+        self.ai_job = None
+        self.ai_epoch = 0
         self._source_document = None
         self._adjustment = None
         self._adjusted_document = None
         self.network = QNetworkAccessManager(self)
         self.bridge, self.overlay, self.installer = QProcess(self), QProcess(self), QProcess(self)
         self.link = OverlayLink(self)
+        self.audio_probe = QProcess(self)
+        self.audio_target = None
+        self.audio_probe.finished.connect(self.audio_probe_finished)
         self.build_ui()
         self.link.connected.connect(
             lambda active: self.overlay_button.setToolTip(
@@ -128,7 +145,7 @@ class Dashboard(QWidget):
             process.errorOccurred.connect(lambda _, n=name: self.activity.setText(f"No se pudo iniciar: {n}"))
         self.installer.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.installer.readyReadStandardOutput.connect(
-            lambda: self.engine_button.setToolTip(
+            lambda: self.activity.setToolTip(
                 bytes(self.installer.readAllStandardOutput()).decode(errors="replace")[-1600:]
             )
         )
@@ -140,6 +157,10 @@ class Dashboard(QWidget):
         self.timer.start(700)
         self.check_engines()
         self.poll()
+        QTimer.singleShot(1000, self.bootstrap)
+        self.audio_timer = QTimer(self)
+        self.audio_timer.timeout.connect(self.probe_audio)
+        self.audio_timer.start(3000)
 
     def button(self, text, callback, layout, tooltip=None):
         button = QPushButton(text)
@@ -161,6 +182,8 @@ class Dashboard(QWidget):
             QLabel#cover { background: #28282a; border: 1px solid #555555; border-radius: 16px; font: 58px 'Noto Sans'; }
             QPushButton, QToolButton, QComboBox { background: #353537; border: 1px solid #555555; border-radius: 9px; padding: 10px; }
             QPushButton:hover, QToolButton:hover { background: #4b4b4e; }
+            QToolButton { background: transparent; border: none; padding: 6px; }
+            QToolButton:focus { border: 1px solid #aaaaaa; }
             QPushButton:checked { background: #eeeeee; color: #181818; }
             QPushButton:disabled { color: #777777; }
             QPushButton:focus, QLineEdit:focus, QDoubleSpinBox:focus { border: 1px solid #ffffff; }
@@ -196,7 +219,16 @@ class Dashboard(QWidget):
             "Chromium no distingue Brave/Chrome/Vivaldi. Selecciona el icono del navegador que usas."
         )
         self.browser.currentTextChanged.connect(lambda name: self.settings.setValue("browser-label", name))
-        head.addWidget(self.browser)
+        self.browser.hide()
+        self.browser_badge = QLabel()
+        self.browser_badge.setFixedSize(22, 22)
+        head.addWidget(self.browser_badge)
+        more = QToolButton()
+        more.setText("⋯")
+        more.setToolTip("Ajustes y corrección manual")
+        more.setAccessibleName("Ajustes y corrección manual")
+        more.clicked.connect(self.show_settings)
+        head.addWidget(more)
         for text, tooltip, callback in (
             ("−", "Minimizar", self.showMinimized),
             ("×", "Cerrar y detener", self.close),
@@ -223,16 +255,8 @@ class Dashboard(QWidget):
         self.source_label = label("SIN REPRODUCCIÓN", "muted")
         left.addWidget(self.source_label)
         self.meter = AudioMeter()
-        self.meter.failure.connect(lambda text: self.audio_note.setText(text))
+        self.meter.failure.connect(self.meter.setToolTip)
         left.addWidget(self.meter)
-        self.audio = QCheckBox("Audio del sistema")
-        self.audio.setToolTip(
-            "Permite espectro local y reconocimiento en paralelo mediante huellas de hasta 3 fragmentos enviadas a Shazam. Captura cualquier sonido que salga por los altavoces. No usa micrófono ni guarda audio."
-        )
-        self.audio.toggled.connect(self.audio_changed)
-        left.addWidget(self.audio)
-        self.audio_note = label("Espectro apagado · Shazam sin permiso", "muted")
-        left.addWidget(self.audio_note)
         left.addStretch()
         body.addLayout(left)
         right = QVBoxLayout()
@@ -249,15 +273,30 @@ class Dashboard(QWidget):
         right.addWidget(self.timeline)
         self.clock = label("— : —", "muted")
         right.addWidget(self.clock)
-        controls = QHBoxLayout()
-        self.button("Conectar", self.start, controls)
-        self.overlay_button = self.button("Letras", lambda: None, controls)
+        self.overlay_button = QPushButton("Mostrar letras", self)
         self.overlay_button.setCheckable(True)
         self.overlay_button.setChecked(True)
         self.overlay_button.toggled.connect(self.toggle_overlay)
-        self.button("Shazam", lambda: self.search(True), controls)
-        self.button("■", self.stop, controls, "Detener")
-        right.addLayout(controls)
+        self.overlay_button.hide()
+        self.lyric_preview = label("", "title")
+        right.addWidget(self.lyric_preview, 1)
+        self.lyric_lines = QListWidget()
+        self.lyric_lines.setAccessibleName("Letra completa; doble clic para alinear con la música")
+        self.lyric_lines.setWordWrap(True)
+        self.lyric_lines.setStyleSheet(
+            "QListWidget { border: none; background: transparent; font-size: 16px; } QListWidget::item { padding: 8px; color: #aaaaaa; } QListWidget::item:selected { color: white; background: #353537; border-radius: 6px; }"
+        )
+        self.lyric_lines.itemDoubleClicked.connect(self.align_visible_line)
+        self.lyric_lines.hide()
+        self._visible_document = None
+        right.addWidget(self.lyric_lines, 1)
+        self.lines_button = QToolButton()
+        self.lines_button.setText("≡")
+        self.lines_button.setToolTip("Mostrar más líneas · doble clic en una línea para alinear")
+        self.lines_button.setAccessibleName("Mostrar letra completa con desplazamiento automático")
+        self.lines_button.setCheckable(True)
+        self.lines_button.toggled.connect(self.toggle_lines)
+        head.insertWidget(head.count() - 2, self.lines_button)
         self.activity = label("Lista para conectar", "muted")
         right.addWidget(self.activity)
         self.progress = QProgressBar()
@@ -265,13 +304,7 @@ class Dashboard(QWidget):
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
         right.addWidget(self.progress)
-        self.steps = QListWidget()
-        self.steps.setMinimumHeight(110)
-        self.steps.setAccessibleName("Intentos de búsqueda y reconocimiento")
-        right.addWidget(self.steps, 1)
         actions = QHBoxLayout()
-        self.button("Buscar", self.manual_search, actions)
-        self.button("Sincronizar", self.show_lines, actions)
         self.extension_button = self.button(
             "Extensión ↗",
             lambda: QDesktopServices.openUrl(
@@ -283,12 +316,6 @@ class Dashboard(QWidget):
             "Instalar o configurar WebNowPlaying. Sin conexión no significa necesariamente que no esté instalada.",
         )
         right.addLayout(actions)
-        self.engine_button = self.button(
-            "Instalar motores",
-            self.install_engines,
-            right,
-            "Instalar ShazamIO, syncedlyrics y NumPy desde PyPI en el entorno de SingLayer",
-        )
         body.addLayout(right, 1)
         layout.addLayout(body, 1)
         self.offset, self.speed = QDoubleSpinBox(), QDoubleSpinBox()
@@ -311,7 +338,204 @@ class Dashboard(QWidget):
             footer.addWidget(label(name, "muted"))
             footer.addWidget(spin)
             spin.valueChanged.connect(self.publish)
-        layout.addLayout(footer)
+        self.adjustments = QWidget(self)
+        self.adjustments.setLayout(footer)
+        self.adjustments.hide()
+        self.reading_mode = QComboBox(self)
+        self.reading_mode.addItems(
+            ["Original", "Pronunciación española · local", "Original + pronunciación · local"]
+        )
+        self.reading_mode.currentIndexChanged.connect(self.reading_changed)
+        self.reading_mode.hide()
+
+    def show_settings(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Ajustes")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(label("Corrección manual, solo si hace falta", "muted"))
+        self.button("Buscar otra canción", self.manual_search, layout)
+        self.button("Elegir otra versión de la letra", self.choose_version, layout)
+        self.button("Alinear la letra", self.show_lines, layout)
+        self.button(
+            "Calibrar slowed / sped up con dos líneas",
+            lambda: (dialog.accept(), self.begin_calibration()),
+            layout,
+        )
+        self.button("Restablecer sincronización", self.reset_alignment, layout)
+        self.button("Reintentar búsqueda", self.search, layout)
+        layout.addWidget(self.overlay_button)
+        layout.addWidget(self.adjustments)
+        layout.addWidget(self.reading_mode)
+        layout.addWidget(self.browser)
+        self.browser.show()
+        self.overlay_button.show()
+        self.adjustments.show()
+        self.reading_mode.show()
+        self.button("Practicar pronunciación", self.practice, layout)
+        self.button("Reintentar pronunciación", self.reading_changed, layout)
+        self.button(
+            "Abrir diagnóstico local",
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(log_path()))),
+            layout,
+        )
+        layout.addWidget(
+            label(
+                "La pronunciación se calcula localmente. Es aproximada; conserva el idioma original y no traduce. No envía letras ni audio.",
+                "muted",
+            )
+        )
+        layout.addWidget(
+            label(
+                "Solo audio del navegador. Las huellas de reconocimiento se envían a Shazam; no se guarda la grabación.",
+                "muted",
+            )
+        )
+        dialog.exec()
+        for widget in (self.overlay_button, self.adjustments, self.reading_mode, self.browser):
+            widget.hide()
+            widget.setParent(self)
+
+    def cancel_ai(self):
+        self.ai_epoch += 1
+        process, self.ai_job = self.ai_job, None
+        if process:
+            process.terminate()
+            self.retiring_jobs.add(process)
+            QTimer.singleShot(3800, lambda: process.kill() if process in self.retiring_jobs else None)
+
+    def reading_changed(self, *_):
+        self.cancel_ai()
+        self.progress.setRange(0, 100)
+        self._adjustment = None
+        self.publish()
+        if not self.reading_mode.currentIndex() or not self.document:
+            return
+        key = tuple(line["text"] for line in self.document["lines"])
+        if self.guide_key != key:
+            self.guide = None
+            self.guide_key = key
+            self._adjustment = None
+            self.publish()
+        if key in self.guide_cache:
+            self.guide = self.guide_cache[key]
+            self._adjustment = None
+            self.publish()
+            return
+        epoch = self.ai_epoch
+        process = QProcess(self)
+        self.ai_job = process
+        self.activity.setText("Preparando pronunciación…")
+        self.progress.setRange(0, 0)
+        output = bytearray()
+
+        def read():
+            output.extend(bytes(process.readAllStandardOutput()))
+            if len(output) > 200_000:
+                process.kill()
+
+        def finish(*_):
+            read()
+            self.retiring_jobs.discard(process)
+            if epoch == self.ai_epoch:
+                self.ai_job = None
+                self.progress.setRange(0, 100)
+                try:
+                    result = json.loads(output)
+                    if "fatal" in result:
+                        raise ValueError(str(result["fatal"])[:240])
+                    if len(result["guide"]) != len(key):
+                        raise ValueError("Guía incompleta")
+                    self.guide = result["guide"]
+                    if len(self.guide_cache) >= 16:
+                        self.guide_cache.pop(next(iter(self.guide_cache)))
+                    self.guide_cache[key] = self.guide
+                    self.activity.setText(f"Guía aproximada · {result['elapsed']:.2f} s")
+                    self._adjustment = None
+                    self.publish()
+                except (ValueError, KeyError, TypeError) as error:
+                    record("pronunciation_panel", type(error).__name__)
+                    self.activity.setText("Pronunciación no disponible · pasa el cursor para ver el motivo")
+                    self.activity.setToolTip(str(error)[:300] or "El proceso terminó sin respuesta")
+            process.deleteLater()
+
+        process.readyReadStandardOutput.connect(read)
+        process.finished.connect(finish)
+        process.errorOccurred.connect(
+            lambda error: finish() if error == QProcess.ProcessError.FailedToStart else None
+        )
+        # Send text only. Never let the model alter timestamps or receive audio.
+        payload = {"document": {"lines": [{"text": text} for text in key]}}
+        process.started.connect(
+            lambda: (process.write(json.dumps(payload).encode()), process.closeWriteChannel())
+        )
+        process.start(sys.executable, ["-m", "singlayer.worker", "pronunciation"])
+
+        def deadline():
+            if self.ai_job is process and epoch == self.ai_epoch:
+                record("pronunciation_panel", "deadline_95s")
+                process.kill()
+
+        QTimer.singleShot(95_000, deadline)
+
+    def practice(self):
+        if not self.guide or not self.document:
+            self.activity.setText("Activa la guía de pronunciación en ⋯")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Pronunciación · guía aproximada")
+        dialog.resize(620, 420)
+        layout = QVBoxLayout(dialog)
+        text = QPlainTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(
+            "\n\n".join(
+                f"{line['text']}\n{item['phonetic']}" + (f"\n{item['tip']}" if item.get("tip") else "")
+                for line, item in zip(self.document["lines"], self.guide)
+            )
+        )
+        layout.addWidget(text)
+        dialog.exec()
+
+    def bootstrap(self):
+        if self.closing:
+            return
+        self.start()
+        if self.missing_engines:
+            self.install_engines()
+
+    def probe_audio(self):
+        if not self.wanted or not self.track or not self.track.get("playing") or self.track.get("stale"):
+            if self.audio_target:
+                self.meter.stop()
+                self.audio_target = None
+            return
+        if self.audio_probe.state() != QProcess.ProcessState.NotRunning:
+            return
+        self.audio_probe.start(sys.executable, ["-m", "singlayer.worker", "audio-target"])
+        self.audio_probe.write(json.dumps({"title": self.track["title"]}).encode())
+        self.audio_probe.closeWriteChannel()
+
+    def audio_probe_finished(self, *_):
+        try:
+            result = json.loads(bytes(self.audio_probe.readAllStandardOutput()))
+            target = result.get("target")
+            if not target:
+                self.meter.setToolTip(
+                    result.get(
+                        "fatal", "No hay un flujo de navegador identificable; no se captura el escritorio."
+                    )
+                )
+        except (ValueError, AttributeError):
+            target = None
+        if not self.wanted or not self.track or not self.track.get("playing"):
+            target = None
+        if target != self.audio_target:
+            self.meter.stop()
+            self.audio_target = target
+            if target:
+                self.meter.start(target)
+        elif target and self.meter.process.state() == QProcess.ProcessState.NotRunning:
+            self.meter.start(target)
 
     def poll(self):
         if self.pending:
@@ -324,6 +548,9 @@ class Dashboard(QWidget):
 
     def receive(self, reply):
         self.pending = False
+        if self.closing:
+            reply.deleteLater()
+            return
         try:
             data = json.loads(bytes(reply.readAll()))
             if data.get("service") != "singlayer" or data.get("api_version") != 2:
@@ -333,14 +560,13 @@ class Dashboard(QWidget):
             self.connection.setText("○ Conector apagado o antiguo")
             if self.track:
                 self.cancel_job()
+                self.stop_live(reset=True)
                 self.track = self.document = None
                 self.publish()
                 self.title.setText("Sin conexión")
                 self.cover.clear()
                 self.cover.setText("♫")
-            self.activity.setText(
-                self.bridge_error or "Pulsa Conectar; cierra antes cualquier versión anterior."
-            )
+            self.activity.setText(self.bridge_error or "Conectando con tu navegador…")
             return
         finally:
             reply.deleteLater()
@@ -352,20 +578,40 @@ class Dashboard(QWidget):
         self.browser.setEnabled(bool(count))
         if self.browser.currentText() == "Auto" and families:
             self.browser.setItemIcon(0, QIcon.fromTheme(ICONS.get(families[0], "web-browser")))
+        self.browser_badge.setPixmap(self.browser.itemIcon(self.browser.currentIndex()).pixmap(20, 20))
+        self.browser_badge.setToolTip(self.connection.text())
+        self.connection.hide()
         self.extension_button.setVisible(not count)
         track = data.get("track")
         identity, previous = track.get("id") if track else None, self.track.get("id") if self.track else None
         if identity != previous:
+            self.stop_live(reset=True)
+            self.calibration_anchor = None
+            self.calibrating = False
+            self.cancel_ai()
+            self.guide = None
             self.cancel_job()
             self.document, self.plain, self.cover_revision = None, "", None
             self.cover.clear()
             self.cover.setText("♫")
+            self.cover_attempts.clear()
             self.events.clear()
-            self.steps.clear()
             for spin, value in ((self.offset, 0), (self.speed, 1)):
                 spin.blockSignals(True)
                 spin.setValue(value)
                 spin.blockSignals(False)
+        import time
+
+        now = time.monotonic()
+        if track and self.track and identity == previous and self.clock_observed_at is not None:
+            elapsed = now - self.clock_observed_at if self.track.get("playing") else 0
+            if abs(track.get("position", 0) - self.track.get("position", 0) - elapsed) > 1.5:
+                self.stop_live()
+                self.live_document = None
+                if self.job:
+                    self.cancel_job()
+                    self.resume_search = True
+        self.clock_observed_at = now
         self.track = track
         if not track:
             self.title.setText("Esperando música")
@@ -374,6 +620,10 @@ class Dashboard(QWidget):
             self.timeline.setValue(0)
             self.publish()
             return
+        if not track.get("playing") or track.get("stale"):
+            self.stop_live()
+        else:
+            self.start_live()
         self.title.setText(track["title"])
         self.artist.setText(track.get("artist", ""))
         self.source_label.setText(track.get("source", "NAVEGADOR").upper())
@@ -383,27 +633,40 @@ class Dashboard(QWidget):
             + (" · reloj detenido" if track.get("stale") else " · pausa" if not track.get("playing") else "")
         )
         self.timeline.setValue(int(1000 * min(position / duration, 1)) if duration else 0)
-        revision = track.get("cover")
-        if revision and revision != self.cover_revision:
+        revision = track.get("cover") or safe_cover_url(track.get("cover_url"))
+        if revision and revision != self.cover_revision and self.cover_attempts.get(revision, 0) < 3:
             self.fetch_cover(revision, identity)
-        if self.job and self.audio.isChecked() and (not track.get("playing") or track.get("stale")):
+        if self.job and (not track.get("playing") or track.get("stale")):
             self.cancel_job()
-            self.activity.setText("Audio en pausa · pulsa Buscar para reintentar")
-        if self.wanted and identity != previous:
+            self.resume_search = True
+            self.activity.setText("En pausa")
+        if self.wanted and (
+            identity != previous
+            or (getattr(self, "resume_search", False) and track.get("playing") and not track.get("stale"))
+        ):
+            self.resume_search = False
             self.search()
         self.publish()
 
     def fetch_cover(self, revision, identity):
         self.cover_revision = revision
+        self.cover_attempts[revision] = self.cover_attempts.get(revision, 0) + 1
         if self.cover_reply:
             self.cover_reply.abort()
-        request = QNetworkRequest(QUrl(f"http://127.0.0.1:8975/cover?rev={revision}"))
+        direct = safe_cover_url(revision)
+        request = QNetworkRequest(QUrl(direct or f"http://127.0.0.1:8975/cover?rev={revision}"))
+        request.setAttribute(
+            QNetworkRequest.Attribute.RedirectPolicyAttribute,
+            QNetworkRequest.RedirectPolicy.ManualRedirectPolicy,
+        )
         request.setTransferTimeout(3000)
         reply = self.network.get(request)
         self.cover_reply = reply
+        reply.downloadProgress.connect(lambda received, _: reply.abort() if received > 1_500_000 else None)
 
         def done():
             raw = bytes(reply.readAll())
+            loaded = False
             if (
                 self.track
                 and self.track["id"] == identity
@@ -418,6 +681,7 @@ class Dashboard(QWidget):
                 if 0 < size.width() <= 4096 and 0 < size.height() <= 4096:
                     pixmap = QPixmap.fromImage(reader.read())
                     if not pixmap.isNull():
+                        loaded = True
                         self.cover.setPixmap(
                             pixmap.scaled(
                                 250,
@@ -428,6 +692,8 @@ class Dashboard(QWidget):
                         )
             if self.cover_reply is reply:
                 self.cover_reply = None
+                if not loaded:
+                    self.cover_revision = None
             reply.deleteLater()
 
         reply.finished.connect(done)
@@ -467,32 +733,226 @@ class Dashboard(QWidget):
 
     def publish(self, *_):
         adjustment = self.offset.value(), self.speed.value()
-        if self._source_document is not self.document or self._adjustment != adjustment:
-            self._source_document = self.document
+        source_document = self.live_document or self.document
+        if self.live_document:
+            adjustment = (0, 1)
+        if self._source_document is not source_document or self._adjustment != adjustment:
+            self._source_document = source_document
             self._adjustment = adjustment
-            self._adjusted_document = adjusted_document(self.document, *adjustment)
+            self._adjusted_document = adjusted_document(source_document, *adjustment)
+            if self.reading_mode.currentIndex() and not self.live_document:
+                self._adjusted_document = apply_guide(
+                    self._adjusted_document, self.guide, self.reading_mode.currentIndex() == 2
+                )
         self.link.update(self.track, self._adjusted_document)
+        lines = (self._adjusted_document or {}).get("lines", [])
+        position = (self.track or {}).get("position", 0)
+        current = next((line for line in reversed(lines) if line["start"] <= position), None)
+        if self.live_document and current and current.get("end", position) < position - 3:
+            current = None
+
+        def display_text(line):
+            return line["text"] + ("\n" + line["translation"] if line.get("translation") else "")
+
+        self.lyric_preview.setText(display_text(current) if current else "")
+        if self._visible_document is not self._adjusted_document:
+            self._visible_document = self._adjusted_document
+            self.lyric_lines.clear()
+            self.lyric_lines.addItems([display_text(line) for line in lines])
+        row = next((i for i in range(len(lines) - 1, -1, -1) if lines[i]["start"] <= position), -1)
+        if row != self.lyric_lines.currentRow():
+            self.lyric_lines.setCurrentRow(row)
+            if row >= 0:
+                self.lyric_lines.scrollToItem(
+                    self.lyric_lines.item(row), QAbstractItemView.ScrollHint.PositionAtCenter
+                )
+
+    def toggle_lines(self, enabled):
+        self.lyric_preview.setVisible(not enabled)
+        self.lyric_lines.setVisible(enabled)
+        self.publish()
+
+    def align_visible_line(self, item):
+        if self.live_document:
+            self.stop_live(reset=True)
+            self.publish()
+            self.activity.setText("Letra original restaurada · selecciona la línea para ajustar")
+            return
+        self.stop_live(reset=True)
+        row = self.lyric_lines.row(item)
+        if self.document and self.track and 0 <= row < len(self.document["lines"]):
+            if self.calibrating:
+                self.record_anchor(row)
+                return
+            self.offset.setValue(
+                self.document["lines"][row]["start"] - self.track["position"] * self.speed.value()
+            )
+            self.activity.setText("Letra alineada con este momento")
+
+    def begin_calibration(self):
+        self.stop_live(reset=True)
+        if not self.document:
+            self.activity.setText("Primero hace falta una letra con tiempos")
+            return
+        self.publish()
+        self.calibrating = True
+        self.calibration_anchor = None
+        self.lines_button.setChecked(True)
+        self.activity.setText("Doble clic en la línea que empieza a sonar; después marca otra más adelante")
+
+    def record_anchor(self, row):
+        if not self.track.get("playing") or self.track.get("stale"):
+            self.activity.setText("Reproduce la música antes de marcar una referencia")
+            return
+        point = self.track["position"], self.document["lines"][row]["start"]
+        if self.calibration_anchor is None:
+            self.calibration_anchor = point
+            self.activity.setText("Primera referencia guardada · marca otra línea dentro de al menos 15 s")
+            return
+        try:
+            offset, speed = calibrate(self.calibration_anchor, point)
+        except ValueError as error:
+            self.activity.setText(str(error))
+            return
+        self.offset.blockSignals(True)
+        self.speed.blockSignals(True)
+        self.offset.setValue(offset)
+        self.speed.setValue(speed)
+        self.offset.blockSignals(False)
+        self.speed.blockSignals(False)
+        self.calibrating = False
+        self.calibration_anchor = None
+        self.publish()
+        self.activity.setText(f"Sincronización calibrada · {speed:.3f} ×")
+
+    def reset_alignment(self):
+        self.calibrating = False
+        self.calibration_anchor = None
+        self.offset.setValue(0)
+        self.speed.setValue(1)
+        self.activity.setText("Tiempos originales restaurados")
+
+    def stop_live(self, reset=False):
+        self.live_epoch += 1
+        process, self.live_job = self.live_job, None
+        if process:
+            self.retiring_jobs.add(process)
+            process.terminate()
+            QTimer.singleShot(3800, lambda: process.kill() if process in self.retiring_jobs else None)
+        if reset:
+            self.live_enabled = False
+            self.live_document = None
+            self.live_retry_at = 0
+
+    def start_live(self):
+        import time
+
+        if (not self.live_enabled or not self.wanted or self.live_job or not self.track
+                or not self.track.get("playing") or self.track.get("stale")
+                or time.monotonic() < self.live_retry_at):
+            return
+        if not (ROOT / ".build/crisperwhisper/ready.json").is_file():
+            self.activity.setText("CrisperWhisper no instalado · ejecuta scripts/setup-crisper.sh")
+            self.live_enabled = False
+            return
+        if self.crisper.state() == QProcess.ProcessState.NotRunning:
+            self.crisper.start("bash", [str(ROOT / "scripts/run-crisper.sh")])
+        process = QProcess(self)
+        self.live_job = process
+        epoch = self.live_epoch
+        output = bytearray()
+        self.activity.setText("Escuchando fragmentos · CrisperWhisper · CPU")
+
+        def consume():
+            from .alignment import align_fragment
+            from .live_transcription import merge_transcript
+
+            output.extend(bytes(process.readAllStandardOutput()))
+            if len(output) > 1_000_000:
+                self.stop_live()
+                return
+            while b"\n" in output:
+                line, _, rest = output.partition(b"\n")
+                output[:] = rest
+                if epoch != self.live_epoch:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if "transcript" in event:
+                        doc = event["transcript"]
+                        if self.document:
+                            choices = self.catalog_candidates or [self.document]
+                            aligned = [align_fragment(doc, candidate) for candidate in choices]
+                            aligned = [candidate for candidate in aligned if candidate]
+                            signatures = {tuple(line["text"].casefold() for line in candidate["lines"]) for candidate in aligned}
+                            doc = max(aligned, key=lambda candidate: len(candidate["lines"])) if len(signatures) == 1 else None
+                            if not doc:
+                                self.activity.setText("Audio sin coincidencia inequívoca · ajuste manual disponible")
+                                continue
+                        self.live_document = merge_transcript(self.live_document, doc)
+                        self.activity.setText(
+                            f"{'Alineación' if self.document else 'Transcripción'} estimada · retraso {event['lag']:.1f} s"
+                        )
+                        self.publish()
+                    elif event.get("discontinuity"):
+                        self.live_document = None
+                        self.publish()
+                    elif "fatal" in event:
+                        self.activity.setText(event["fatal"])
+                        self.live_retry_at = time.monotonic() + 30
+                    elif "live_status" in event:
+                        self.activity.setText(event["live_status"])
+                except (ValueError, KeyError, TypeError):
+                    self.activity.setText("Respuesta de transcripción inválida")
+
+        finished = False
+
+        def finish(*_):
+            nonlocal finished
+            if finished:
+                return
+            finished = True
+            consume()
+            if epoch == self.live_epoch:
+                self.live_job = None
+                self.live_retry_at = max(self.live_retry_at, time.monotonic() + 1)
+            self.retiring_jobs.discard(process)
+            process.deleteLater()
+
+        process.readyReadStandardOutput.connect(consume)
+        process.finished.connect(finish)
+        def failed(error):
+            if error == QProcess.ProcessError.FailedToStart:
+                if epoch == self.live_epoch:
+                    self.activity.setText("No se pudo iniciar la transcripción local")
+                    self.live_retry_at = time.monotonic() + 30
+                finish()
+
+        process.errorOccurred.connect(failed)
+        payload = json.dumps({"track": dict(self.track)}).encode()
+        process.started.connect(lambda: (process.write(payload), process.closeWriteChannel()))
+        process.start(sys.executable, ["-m", "singlayer.worker", "live"])
 
     def search(self, recognize=False, override=None):
         if not self.track:
             self.activity.setText("Primero conecta una canción")
             return
-        if recognize and (
-            not self.audio.isChecked() or not self.track.get("playing") or self.track.get("stale")
-        ):
-            self.activity.setText("Activa Audio del sistema y reproduce una canción")
+        if recognize and (not self.track.get("playing") or self.track.get("stale")):
+            self.activity.setText("Reproduce una canción para reconocerla")
             return
         if self.installer.state() != QProcess.ProcessState.NotRunning:
             return
         self.cancel_job()
+        self.stop_live(reset=True)
         self.events.clear()
-        self.steps.clear()
         cache_key = (self.track["title"], self.track.get("artist", ""), self.track.get("duration"))
         if not recognize and override is None and cache_key in self.result_cache:
             self.job_event({"finished": True, "result": self.result_cache[cache_key]})
             self.activity.setText("Letra recuperada de esta sesión")
             return
         self.document, self.plain = None, ""
+        self.cancel_ai()
+        self.guide = None
         self.publish()
         self.progress.setRange(0, 0)
         self.activity.setText("Reconociendo audio…" if recognize else "Buscando letras…")
@@ -502,9 +962,7 @@ class Dashboard(QWidget):
         data = {
             "track": override or self.track,
             "recognize": recognize,
-            "audio_allowed": bool(
-                self.audio.isChecked() and self.track.get("playing") and not self.track.get("stale")
-            ),
+            "audio_allowed": bool(self.track.get("playing") and not self.track.get("stale")),
         }
         output = bytearray()
 
@@ -566,8 +1024,11 @@ class Dashboard(QWidget):
             self.activity.setText(event["fatal"])
             return
         if event.get("finished"):
+            self.calibrating = False
+            self.calibration_anchor = None
             result = event["result"]
             self.document, self.plain = result.get("document"), result.get("plain", "")
+            self.catalog_candidates = result.get("candidates", [])
             if self.document:
                 from kotonoha.lyrics.protocol import AdapterProtocolDecoder
 
@@ -582,28 +1043,45 @@ class Dashboard(QWidget):
             for value in self.events.values():
                 if value["state"] == "running":
                     value.update(state="skipped", detail="Otro proveedor respondió")
-            self.render_steps()
             self.activity.setText(
-                f"Letra · {self.document['source']} · comprueba la sincronía"
+                (
+                    f"Identidad confirmada · {result['evidence']['matches']}/{result['evidence']['samples']} muestras · timing por comprobar"
+                    if result.get("evidence", {}).get("confirmed")
+                    else f"Letra candidata · {self.document['source']} · identidad/timing sin confirmar"
+                )
                 if self.document
-                else "Texto sin tiempos · abre Sincronizar"
+                else "Letra encontrada sin sincronización"
                 if self.plain
-                else "Sin coincidencia · prueba Buscar o Shazam"
+                else self.search_failure()
             )
             self.progress.setRange(0, 100)
             self.progress.setValue(100 if self.document or self.plain else 0)
             self.publish()
+            self.reading_changed()
+            from .workflow import search_identity
+
+            self.live_enabled = (not self.document
+                                 or search_identity(self.track or {"title": ""})["edited"]
+                                 or len(self.catalog_candidates) > 1)
+            self.start_live()
             return
         self.events[event["stage"]] = event
-        self.render_steps()
         if event["state"] == "running":
             self.activity.setText(event["detail"])
 
-    def render_steps(self):
-        self.steps.clear()
-        for stage, event in self.events.items():
-            self.steps.addItem(f"{STATES.get(event['state'], '○')}  {stage}  ·  {event['detail']}")
-        self.steps.scrollToBottom()
+    def search_failure(self):
+        failures = [event for event in self.events.values() if event["state"] in {"error", "missing"}]
+        self.activity.setToolTip(
+            "\n".join(f"{stage}: {event['detail']}" for stage, event in self.events.items())
+        )
+        if any(
+            stage.startswith("shazam") and event["state"] in {"error", "missing"}
+            for stage, event in self.events.items()
+        ):
+            return "Sin letra · reconocimiento de audio no disponible · detalles al pasar el cursor"
+        if failures:
+            return "Búsqueda incompleta: fallaron proveedores · detalles al pasar el cursor"
+        return "Los proveedores consultados no encontraron letra · ajustes en ⋯"
 
     def cancel_job(self):
         self.job_epoch += 1
@@ -647,6 +1125,68 @@ class Dashboard(QWidget):
                 }
             )
 
+    def choose_version(self):
+        if not self.track:
+            return
+        identity = self.track["id"]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Otras versiones · LRCLIB")
+        dialog.resize(560, 400)
+        layout = QVBoxLayout(dialog)
+        status = label("Buscando versiones…", "muted")
+        listing = QListWidget()
+        layout.addWidget(status)
+        layout.addWidget(listing)
+        documents = []
+        process = QProcess(dialog)
+        output = bytearray()
+
+        def read():
+            output.extend(bytes(process.readAllStandardOutput()))
+            if len(output) > 4_000_000:
+                process.kill()
+
+        def finish(*_):
+            read()
+            try:
+                result = json.loads(output)
+                documents.extend(result.get("documents", []))
+                listing.addItems(
+                    [f"{doc['title']} — {doc['artist']} · {len(doc['lines'])} líneas" for doc in documents]
+                )
+                status.setText(
+                    "Doble clic para usar una versión; puede requerir alinear tiempos."
+                    if documents
+                    else "Proveedor no disponible"
+                    if result.get("failed") or result.get("fatal")
+                    else "No hay versiones para este título"
+                )
+            except (ValueError, KeyError, TypeError):
+                status.setText("No se pudo consultar las versiones")
+
+        def select(item):
+            if self.track and self.track["id"] == identity:
+                self.cancel_job()
+                self.cancel_ai()
+                self.guide = None
+                self.job_event({"finished": True, "result": {"document": documents[listing.row(item)]}})
+                dialog.accept()
+
+        listing.itemDoubleClicked.connect(select)
+        process.readyReadStandardOutput.connect(read)
+        process.finished.connect(finish)
+        process.started.connect(
+            lambda: (process.write(json.dumps({"track": self.track}).encode()), process.closeWriteChannel())
+        )
+        process.start(sys.executable, ["-m", "singlayer.worker", "alternatives"])
+        deadline = QTimer(dialog)
+        deadline.setSingleShot(True)
+        deadline.timeout.connect(process.kill)
+        deadline.start(25_000)
+        dialog.exec()
+        deadline.stop()
+        terminate(process)
+
     def show_lines(self):
         if not self.document and not self.plain:
             self.activity.setText("Aún no hay letras · prueba Buscar")
@@ -677,22 +1217,14 @@ class Dashboard(QWidget):
             layout.addWidget(text)
         dialog.exec()
 
-    def audio_changed(self, enabled):
-        if enabled:
-            self.audio_note.setText("Salida del sistema · huellas a Shazam")
-            self.meter.start()
-        else:
-            self.cancel_job()
-            self.meter.stop()
-            self.audio_note.setText("Espectro apagado · Shazam sin permiso")
-
     def check_engines(self):
         importlib.invalidate_caches()
         missing = [
-            name for name in ("syncedlyrics", "shazamio", "numpy") if importlib.util.find_spec(name) is None
+            name for name in ("syncedlyrics", "shazamio", "numpy", "espeakng_loader", "langid", "pykakasi") if importlib.util.find_spec(name) is None
         ]
-        self.engine_button.setVisible(bool(missing))
-        self.engine_button.setEnabled(True)
+        if sys.version_info >= (3, 13) and importlib.util.find_spec("audioop") is None:
+            missing.append("audioop-lts")
+        self.missing_engines = missing
 
     def install_engines(self):
         uv = shutil.which("uv")
@@ -702,8 +1234,8 @@ class Dashboard(QWidget):
             self.activity.setText("Falta uv · consulta la instalación del proyecto")
             return
         self.cancel_job()
-        self.engine_button.setEnabled(False)
-        self.activity.setText("Instalando motores desde PyPI…")
+        self.activity.setText("Preparando SingLayer por primera vez…")
+        self.progress.setRange(0, 0)
         self.installer.start(
             uv,
             [
@@ -721,8 +1253,11 @@ class Dashboard(QWidget):
     def install_finished(self, code, *_):
         self.check_engines()
         self.activity.setText(
-            "Motores instalados · pulsa Buscar" if code == 0 else "Error de instalación · revisa la conexión"
+            "Listo" if code == 0 else "No se pudo completar la preparación · revisa la conexión"
         )
+        self.progress.setRange(0, 100)
+        if self.wanted and self.track:
+            self.search()
 
     def process_logs(self, process, name):
         message = bytes(process.readAllStandardOutput()).decode(errors="replace")
@@ -744,9 +1279,11 @@ class Dashboard(QWidget):
 
     def stop(self):
         self.wanted = False
+        self.stop_live(reset=True)
+        terminate(self.crisper)
+        self.cancel_ai()
         self.cancel_job()
         self.link.stop()
-        self.audio.setChecked(False)
         self.meter.stop()
         terminate(self.overlay)
         terminate(self.bridge)
@@ -775,7 +1312,10 @@ class Dashboard(QWidget):
                 pass
 
     def closeEvent(self, event):
+        self.closing = True
         self.timer.stop()
+        self.audio_timer.stop()
+        terminate(self.audio_probe)
         self.stop()
         for process in list(self.retiring_jobs):
             if process in self.retiring_jobs:

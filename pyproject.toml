@@ -11,13 +11,16 @@ license = "MIT"
 dependencies = ["aiohttp>=3.12,<4", "dbus-fast>=2.44,<5", "qasync>=0.28,<1"]
 
 [project.optional-dependencies]
-engines = ["syncedlyrics==1.0.1", "shazamio==0.8.1", "numpy>=2,<3"]
+engines = ["syncedlyrics==1.0.1", "shazamio==0.8.1", "numpy>=2,<3", "espeakng-loader==0.2.4", "langid==1.1.6", "pykakasi==2.3.0", "audioop-lts==0.2.2; python_version >= '3.13'"]
 
 [project.scripts]
 singlayer = "singlayer.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"singlayer.pronunciation" = ["SKILL.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

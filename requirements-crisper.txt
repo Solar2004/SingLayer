@@ -1,0 +1,5 @@
+# Dedicated Python 3.12 runtime. Do not mix the CT2 fork with upstream ctranslate2.
+crisperwhisper==2.0.3
+ctranslate2-crisperwhisper==4.7.1.post3
+transformers>=4.40,<5
+aiohttp>=3.12,<4

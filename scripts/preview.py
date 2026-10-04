@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import QApplication
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="docs/overlay-preview.png")
+    parser.add_argument("--bilingual", action="store_true")
     args = parser.parse_args()
     app = QApplication([])
     config = Config.from_dict(
@@ -24,7 +25,8 @@ def main():
             "font_size": 34,
             "context_font_size": 22,
             "panel_style": "text",
-            "show_translation": False,
+            "show_translation": args.bilingual,
+            "translation_font_size": 22,
             "fx_glow": True,
             "fx_word_pop": True,
             "fx_animate": False,
@@ -52,6 +54,7 @@ def main():
             current_time=6.4,
             previous=previous,
             current=current,
+            translation=LyricLine(1, "current", 4, 8, "Guía de pronunciación · segunda línea", "") if args.bilingual else None,
             next=following,
             line_progress=LineProgress("current", 0.6),
             word_progress=WordProgress("current", (1.0, 1.0, 0.4, 0.0), 2),

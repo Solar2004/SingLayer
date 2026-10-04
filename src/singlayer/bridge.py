@@ -13,6 +13,7 @@ from dbus_fast import DBusError
 from dbus_fast.aio import MessageBus
 from dbus_fast.constants import NameFlag, RequestNameReply
 
+from .artwork import safe_cover_url
 from .mpris import BUS_NAME, OBJECT_PATH, MediaPlayer, Root
 from .state import PlayerStore
 
@@ -146,6 +147,7 @@ class Bridge:
                     "id": player.track_id,
                     "source": player.data.get("name", ""),
                     "cover": cover[0] if cover and player.data.get("cover") else None,
+                    "cover_url": safe_cover_url(player.data.get("cover")),
                     "artist": player.data.get("artist", ""),
                     "position": player.position(time.monotonic()),
                     "duration": player.data.get("duration", 0),

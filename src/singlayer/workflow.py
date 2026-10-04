@@ -2,17 +2,98 @@
 
 import asyncio
 import re
+import unicodedata
+from difflib import SequenceMatcher
 
 NATIVE = ("lrclib", "netease", "kugou")
 EXTRA = ("Musixmatch", "Megalobiz")
+EDIT = re.compile(r"\b(?:slowed(?:[ _-]*down)?|spe(?:d|ed)[ _-]*up|nightcore|daycore|reverb|pitched|remix|mashup|looped|snippet|edit(?:[ _-]*audio)?)\b", re.I)
+
+
+def catalog_text(value):
+    from kotonoha.lyrics.title_grammar import base_title
+
+    value = clean_search_text(value)
+    value = re.sub(r"[([{]([^()\[\]{}]*)[)\]}]",
+                   lambda m: "" if EDIT.search(m.group(1)) else m.group(0), value)
+    # Unbracketed editing suffixes are common on SoundCloud.
+    marker = EDIT.search(value)
+    if marker and marker.start() > 0 and all(
+        word in {"slowed", "down", "sped", "speed", "up", "nightcore", "daycore",
+                 "reverb", "pitched", "remix", "mashup", "looped", "snippet", "edit",
+                 "audio", "extra", "and", "muffled"}
+        for word in re.findall(r"\w+", value[marker.start():].casefold())
+    ):
+        value = value[:marker.start()].rstrip(" -_+,&")
+    return base_title(value).strip(" -_+,&")
+
+
+
+def clean_search_text(value):
+    """Normalize decorative Unicode, not arbitrary words that might be a title."""
+    value = unicodedata.normalize("NFKC", value)
+    value = re.sub(r"\.(?:mp3|wav|flac)$", "", value, flags=re.I)
+    value = re.sub(r"[^\w\s'’()\[\]{}&+.,:–—-]", " ", value)
+    return " ".join(value.split()).strip(" -–—")
+
+
+def identity_key(candidate):
+    def key(value):
+        value = unicodedata.normalize("NFKD", value.casefold())
+        return " ".join("".join(c for c in value if not unicodedata.combining(c)).split())
+
+    return key(candidate["title"]), key(candidate.get("artist", ""))
+
+
+def same_recording(a, b):
+    # Prefer Shazam's recording id. Text similarity is only a fallback for
+    # recognition results, never proof that an uploader's metadata is correct.
+    if a.get("recording_id") and b.get("recording_id"):
+        return a["recording_id"] == b["recording_id"]
+    at, aa = identity_key(a)
+    bt, ba = identity_key(b)
+    return bool(
+        aa
+        and ba
+        and SequenceMatcher(None, at, bt).ratio() >= 0.94
+        and SequenceMatcher(None, aa, ba).ratio() >= 0.94
+    )
+
+
+def search_candidates(track):
+    primary = search_identity(track)
+    candidates = [primary]
+    if track.get("manual"):
+        return candidates
+    cleaned = {
+        **track,
+        "title": clean_search_text(track["title"]),
+        "artist": clean_search_text(track.get("artist", "")),
+    }
+    candidates.append(search_identity(cleaned))
+
+    split = re.split(r"\s+[-–—]\s+", cleaned["title"], maxsplit=1)
+    if len(split) == 2 and (primary["edited"] or track.get("source") == "SoundCloud"):
+        candidates.append({"title": catalog_text(split[0]), "artist": catalog_text(split[1]), "duration": None})
+    # Uploader names are not reliable artist identifiers. Title-only fallback
+    # remains explicitly unverified if audio cannot establish identity.
+    if track.get("source") == "SoundCloud":
+        candidates.append({"title": primary["title"], "artist": "", "duration": None})
+    seen, unique = set(), []
+    for candidate in candidates:
+        key = identity_key(candidate)
+        if key not in seen and candidate["title"]:
+            seen.add(key)
+            unique.append(candidate)
+    return unique[:4]
 
 
 def search_identity(track):
     """Keep raw identity elsewhere; this is explicitly a search interpretation."""
     from kotonoha.lyrics.title_grammar import base_title
 
-    title, artist = track["title"], track.get("artist", "")
-    edited = bool(re.search(r"slowed|sped[ -]?up|remix|nightcore|snippet|edit audio", title, re.I))
+    title, artist = clean_search_text(track["title"]), clean_search_text(track.get("artist", ""))
+    edited = bool(EDIT.search(title))
     # Uploader != performer is common on SoundCloud. Keep the raw title in the UI.
     split = re.split(r"\s+[-–—]\s+", title, maxsplit=1)
     if (
@@ -21,7 +102,8 @@ def search_identity(track):
         and (edited or not artist or track.get("source") == "SoundCloud")
     ):
         artist, title = split
-    title = base_title(title)
+    title = catalog_text(title) if not track.get("manual") else base_title(title)
+    artist = catalog_text(artist) if not track.get("manual") else artist
     return {
         "title": title,
         "artist": artist,
@@ -33,6 +115,8 @@ def search_identity(track):
 async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
     """Each invoke is an isolated cancellable operation; never launch unbounded retries."""
     identity = search_identity(track)
+    candidates = search_candidates(track)
+    uncertain = identity["edited"] or track.get("source") == "SoundCloud"
     emit({"stage": "metadata", "state": "done", "detail": f"{identity['title']} · {identity['artist']}"})
     if identity["edited"]:
         emit({"stage": "timing", "state": "warning", "detail": "Versión editada: ajusta desfase y velocidad"})
@@ -44,7 +128,7 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
             return await invoke(action, payload, timeout)
 
     async def lookup(candidate):
-        query_key = (candidate["title"].casefold(), candidate["artist"].casefold())
+        query_key = identity_key(candidate)
         if query_key not in lookups:
             lookups[query_key] = asyncio.create_task(lookup_once(candidate))
         return await asyncio.shield(lookups[query_key])
@@ -89,11 +173,13 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
 
     async def audio_lookup():
         nonlocal identity
+        votes = []
+        best = None
         for attempt in range(1, 4):
             stage = f"shazam-{attempt}"
             emit({"stage": stage, "state": "running", "detail": f"Escuchando fragmento {attempt}/3 · 12 s"})
             try:
-                identified = await limited("recognize", {}, 45)
+                identified = await limited("recognize", {"title": track["title"]}, 45)
             except Exception as error:
                 emit({"stage": stage, "state": "error", "detail": str(error)[:180]})
                 break  # Capture/transport failures aren't 'no match'.
@@ -106,15 +192,63 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
             emit(
                 {"stage": stage, "state": "done", "detail": f"{identified['title']} · {identified['artist']}"}
             )
-            identity = {**identified, "duration": None}
+            votes.append(identified)
+            group = max(
+                ([v for v in votes if v is candidate or same_recording(v, candidate)] for candidate in votes),
+                key=len,
+            )
+            best = group[0]
+            emit(
+                {
+                    "stage": "consensus",
+                    "state": "done" if len(group) >= 2 else "running",
+                    "detail": f"{len(group)} de {attempt} muestras coinciden · {best['title']}",
+                }
+            )
+            if len(group) >= 2:
+                identity = {**best, "duration": None}
+                result = await lookup(identity)
+                if result:
+                    return {
+                        **result,
+                        "recognized": best,
+                        "evidence": {"matches": len(group), "samples": attempt, "confirmed": True},
+                    }
+        # One hit is not corroboration; preserve as a labelled fallback only.
+        if best and len(votes) == 1:
+            identity = {**best, "duration": None}
             result = await lookup(identity)
             if result:
-                return {**result, "recognized": identified}
+                return {
+                    **result,
+                    "recognized": best,
+                    "evidence": {"matches": 1, "samples": attempt, "confirmed": False},
+                }
+        return None
+
+    async def metadata_lookup():
+        found = []
+        for index, candidate in enumerate(candidates, 1):
+            emit(
+                {
+                    "stage": "metadata-alternative",
+                    "state": "running",
+                    "detail": f"Buscando variante {index}/{len(candidates)} · {candidate['title']}",
+                }
+            )
+            result = await lookup(candidate)
+            if result:
+                found.append(result["document"])
+                if track.get("source") != "SoundCloud" or len(found) >= 2:
+                    break
+        if found:
+            return {"document": found[0], "candidates": found,
+                    "evidence": {"confirmed": False, "strategy": "metadata"}}
         return None
 
     paths = []
     if not recognize:
-        paths.append(asyncio.create_task(lookup(identity)))
+        paths.append(asyncio.create_task(metadata_lookup()))
     if audio_allowed:
         paths.append(asyncio.create_task(audio_lookup()))
     else:
@@ -122,14 +256,27 @@ async def resolve(track, invoke, emit, *, recognize=False, audio_allowed=False):
             {
                 "stage": "shazam",
                 "state": "skipped",
-                "detail": "Activa Audio del sistema para permitir reconocimiento",
+                "detail": "Reconocimiento disponible durante la reproducción",
             }
         )
     try:
+        fallback = None
         for completed in asyncio.as_completed(paths):
             result = await completed
             if result:
+                if uncertain and audio_allowed and not result.get("evidence", {}).get("confirmed"):
+                    fallback = result
+                    emit(
+                        {
+                            "stage": "verification",
+                            "state": "running",
+                            "detail": "Letra candidata encontrada · contrastando audio",
+                        }
+                    )
+                    continue
                 return result
+        if fallback:
+            return fallback
     finally:
         for task in [*paths, *lookups.values()]:
             if not task.done():

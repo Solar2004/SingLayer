@@ -75,7 +75,8 @@ def managed_environment():
                     "accent_start": "#e6e6e6",
                     "accent_end": "#ffffff",
                     "accent_sweep": "#ffffff",
-                    "show_translation": False,
+                    "show_translation": True,
+                    "translation_font_size": 22,
                     "ui_language": "en",
                     "anchor_top": False,
                     "margin_edge": 100,
@@ -83,6 +84,12 @@ def managed_environment():
             ),
             encoding="utf-8",
         )
+    # Upgrade only the managed profile's secondary-line slot. Existing font,
+    # placement and other user choices remain untouched.
+    config = json.loads(target.read_text(encoding="utf-8"))
+    if not config.get("show_translation"):
+        config["show_translation"] = True
+        target.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
     env["XDG_CONFIG_HOME"] = str(base)
     env["XDG_CACHE_HOME"] = str(
         Path(env.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "singlayer" / "managed"

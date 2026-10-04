@@ -10,7 +10,6 @@ uv venv --system-site-packages --python "$SINGLAYER_PYTHON" .venv
 uv pip install --python .venv/bin/python -r requirements.lock
 uv pip install --python .venv/bin/python --no-deps -e .
 uv pip install --python .venv/bin/python --no-deps ./upstream/kotonoha
-if [[ "${1:-}" == "--engines" ]]; then
-  uv pip install --python .venv/bin/python -r requirements-engines.txt
-fi
+uv pip install --python .venv/bin/python -r requirements-engines.txt
+bash scripts/setup-recognizer.sh
 echo 'Ready. Add a WebNowPlaying custom adapter on port 8975, then run .venv/bin/singlayer app'

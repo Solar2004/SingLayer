@@ -3,7 +3,11 @@
 Actualizado: 2026-10-04 (validación completa y runtime instalado). Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
-## Optimización — última entrega
+## Motor optimizado — última entrega
+
+213 pruebas pasan. Perfil `reuse-language-encoder-v1` compilado, instalado y validado en RX590 Vulkan. Cinco fragmentos musicales pareados:12→8s con segmentos/texto/tiempos idénticos; inglés, japonés y francés. Pista SoundCloud completa sin caché:150,016→102,076s, primeras letras19,750→16,750s,177,34s/11ventanas. Las ejecuciones completas producen42/43líneas: no afirmar igualdad completa ni exactitud humana. Cache0,2029s. Instalador restaura fuente fijada y valida hashes de biblioteca/parche. Ver [ENCODER_REUSE.md](docs/ENCODER_REUSE.md).
+
+## Optimización progresiva — entrega anterior
 
 209 pruebas pasan. Primeras letras por fragmentos y prioridad al reloj actual. Night Changes real: primeras6frases a19,75s; 42líneas finales/11ventanas/177,34s. Total150,016s (no acelera todo el modelo), repetición0,1998s sin red/inferencia. Descarga reutiliza metadatos y se solapa con preparación del motor. Caché16/24h por versión/modelo, recompila texto de catálogo sin nuevo ASR. Automático de pista completa prefiere GPU instalada aun sin catálogo; CPU explícita se respeta. Variante30s descartada. Ver [PROGRESSIVE_TIMING.md](docs/PROGRESSIVE_TIMING.md).
 

@@ -89,7 +89,8 @@ def create_app(config):
         if not native or native.returncode is not None or not used_gpu:
             raise web.HTTPServiceUnavailable()
         return web.json_response({"service": SERVICE, "backend": "whisper.cpp", "device": "vulkan",
-                                  "model": config["model"], "ready": True, "busy": busy})
+                                  "model": config["model"], "ready": True, "busy": busy,
+                                  "inference_profile": config.get("inference_profile", "baseline")})
 
     async def inference(request):
         nonlocal busy

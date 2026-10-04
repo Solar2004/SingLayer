@@ -1,0 +1,37 @@
+--- a/src/whisper.cpp
++++ b/src/whisper.cpp
+@@ -6989,6 +6989,11 @@
+         }
+     }
+ 
++    // Auto-detection encodes offset zero; reuse those features only when the
++    // transcription uses the same context and has no encoder callback.
++    bool language_encoder_ready = false;
++    const int language_audio_ctx = state->exp_n_audio_ctx;
++
+     // auto-detect language if not specified
+     if (params.language == nullptr || strlen(params.language) == 0 || strcmp(params.language, "auto") == 0 || params.detect_language) {
+         std::vector<float> probs(whisper_lang_max_id() + 1, 0.0f);
+@@ -7005,6 +7010,7 @@
+             WHISPER_LOG_ERROR("%s: failed to auto-detect language\n", __func__);
+             return -3;
+         }
++        language_encoder_ready = true;
+         state->lang_id = lang_id;
+         params.language = whisper_lang_str(lang_id);
+ 
+@@ -7211,8 +7217,12 @@
+             }
+         }
+ 
+-        // encode audio features starting at offset seek
+-        if (!whisper_encode_internal(*ctx, *state, seek, params.n_threads, params.abort_callback, params.abort_callback_user_data)) {
++        // Reuse only the first identical encode performed by language detection.
++        // Offset/context changes and callback callers retain the original path.
++        const bool reuse_language_encoder = language_encoder_ready && seek == 0 &&
++            state->exp_n_audio_ctx == language_audio_ctx && params.encoder_begin_callback == nullptr;
++        language_encoder_ready = false;
++        if (!reuse_language_encoder && !whisper_encode_internal(*ctx, *state, seek, params.n_threads, params.abort_callback, params.abort_callback_user_data)) {
+             WHISPER_LOG_ERROR("%s: failed to encode\n", __func__);
+             return -6;
+         }

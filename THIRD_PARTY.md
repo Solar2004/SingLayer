@@ -55,3 +55,5 @@ model revision and verified SHA256 are in docs/AUTOMATIC_TIMING.md. Crisper CPU
 remains explicitly selectable; its non-commercial model license is unchanged.
 
 Full-track downloading uses the separately installed [yt-dlp](https://github.com/yt-dlp/yt-dlp) 2026.8.19 (Unlicense), with its official default dependencies retaining their upstream licenses. FFmpeg remains a separate system executable; Node is used when available for JavaScript extraction. No downloaded music is bundled or committed.
+
+The pinned whisper.cpp build applies the local MIT patch in `patches/whisper-reuse-language-encoder.patch`; upstream remains MIT. See docs/ENCODER_REUSE.md for source revision, build validation and measured preservation of output.

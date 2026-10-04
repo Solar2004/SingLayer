@@ -33,3 +33,5 @@ Hasta16 resultados, reutilizables durante24 horas, en `~/.cache/singlayer/full-t
 Para una pista nueva hace falta descargar y analizar al menos un fragmento. La primera escucha todavía puede tener espera; una introducción instrumental no produce letras hasta que se detecte voz fiable. Los fragmentos futuros que faltan no se inventan. Las transcripciones y sus tiempos siguen siendo estimados.
 
 209 pruebas pasan. Incluyen entrega parcial antes del resultado final, cobertura completa al cambiar el orden de análisis, presentación en el panel antes de finalizar, caché sin red/inferencia, rechazo de versión/modelo distintos, reloj real con seek/pausa y respeto de la elección explícita de CPU. Ruff y diff check pasan.
+
+Actualización posterior: el motor ahora evita codificación duplicada y reduce también el análisis completo; medidas y límites en [ENCODER_REUSE.md](ENCODER_REUSE.md).

@@ -14,6 +14,11 @@ fi
 [[ "$(git -C "$source_dir" rev-parse HEAD)" == "$revision" && -z "$(git -C "$source_dir" status --porcelain)" ]] || {
   echo 'Expected clean pinned whisper.cpp checkout; existing work was not changed.' >&2; exit 1;
 }
+patch_file="$PWD/patches/whisper-reuse-language-encoder.patch"
+git -C "$source_dir" apply --check "$patch_file"
+git -C "$source_dir" apply "$patch_file"
+# The pinned upstream checkout remains clean after success or build failure.
+trap 'git -C "$source_dir" apply --reverse "$patch_file"' EXIT
 options=(-DGGML_VULKAN=ON -DGGML_CUDA=OFF -DWHISPER_CURL=OFF -DCMAKE_BUILD_TYPE=Release)
 if [[ -f .build/Vulkan-Headers/include/vulkan/vulkan.h && -d .build/vulkan-sdk/include/spirv ]]; then
   options+=("-DVulkan_INCLUDE_DIR=$PWD/.build/Vulkan-Headers/include"
@@ -37,6 +42,7 @@ printf '%s  %s\n' "$checksum" "$model" | sha256sum --check
 # A compiled Vulkan option alone is not proof of device execution.
 rg 'using Vulkan[0-9]+ backend' .build/whisper/smoke.log >/dev/null
 .venv/bin/python - <<'PY'
+import hashlib
 import json
 from pathlib import Path
 root = Path.cwd()
@@ -48,7 +54,11 @@ config = {'backend': 'whisper.cpp', 'device': 'vulkan', 'model': 'large-v3-turbo
           'model_path': str(root / '.build/models/ggml-large-v3-turbo-q5_0.bin'),
           'source_revision': '60c0be6ac8fa71b1a2ae2dd938a31a34a508e774',
           'model_revision': '5359861c739e955e79d9a303bcbc70fb988958b1',
-          'sha256': '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'}
+          'sha256': '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2',
+          'inference_profile': 'reuse-language-encoder-v1',
+          'build_patch_sha256': hashlib.sha256((root / 'patches/whisper-reuse-language-encoder.patch').read_bytes()).hexdigest(),
+          'library_path': str((root / '.build/whisper-vulkan/bin/libwhisper.so').resolve()),
+          'library_sha256': hashlib.sha256((root / '.build/whisper-vulkan/bin/libwhisper.so').read_bytes()).hexdigest()}
 path = root / '.build/whisper/ready.json'
 temporary = path.with_suffix('.part')
 temporary.write_text(json.dumps(config, indent=2))

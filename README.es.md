@@ -25,6 +25,8 @@ anteriores, el primer inicio prepara los componentes que falten mediante `uv` y
 PyPI, sin botón de instalación ni sudo. Necesita Internet. `pactl` y `parec` son
 dependencias del sistema. SongRec es opcional; sin él se utiliza ShazamIO.
 
+El motor Vulkan también evita repetir la codificación durante la detección automática del idioma: aproximadamente 29–32% menos tiempo de cálculo en cinco fragmentos reales, conservando texto y tiempos. Ver [pruebas e instalación](docs/ENCODER_REUSE.md).
+
 ## Navegador y controles
 
 Instala [WebNowPlaying](https://chromewebstore.google.com/detail/webnowplaying/jfakgfcdgpghbbefmdfjkbdlibjgnbli),

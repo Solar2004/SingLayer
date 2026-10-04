@@ -1,4 +1,5 @@
 """Select an explicitly installed engine; never call CPU execution Vulkan."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,13 @@ def selected_engine(preference=None):
             raise ValueError("Motor Whisper no validado")
         if not all(Path(config[key]).is_file() for key in ("binary", "model_path")):
             raise ValueError("Falta el motor Whisper instalado")
+        if config.get("inference_profile") == "reuse-language-encoder-v1":
+            library = Path(config.get("library_path", ""))
+            patch = ROOT / "patches/whisper-reuse-language-encoder.patch"
+            if (not library.is_file() or not patch.is_file()
+                    or hashlib.sha256(library.read_bytes()).hexdigest() != config.get("library_sha256")
+                    or hashlib.sha256(patch.read_bytes()).hexdigest() != config.get("build_patch_sha256")):
+                raise ValueError("El motor optimizado no coincide con la compilación validada")
         return {**config, "label": "Whisper.cpp · Vulkan"}
     return {"backend": "crisperwhisper", "device": "cpu", "label": "CrisperWhisper · CPU",
             "ready": (ROOT / ".build/crisperwhisper/ready.json").is_file()}

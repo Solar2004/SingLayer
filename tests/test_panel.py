@@ -509,3 +509,34 @@ def test_delayed_transcript_explains_empty_current_lyrics(panel):
     panel.publish()
     assert panel.lyric_preview.text() == 'Past measured phrase'
     assert panel.transcription_hint.text() == ''
+
+
+def test_partial_full_audio_is_visible_before_whole_track_finishes(panel):
+    panel.lyric_source = 'auto'
+    panel.track = {**TRACK, 'position': 50}
+    panel.full_completed = False
+    panel.full_document = {'source': 'full-audio', 'lines': [
+        {'text': 'Measured current phrase', 'start': 48, 'end': 55, 'words': [], 'translation': ''}]}
+    panel.full_original_document = panel.full_document
+    panel.publish()
+    assert panel.lyric_preview.text() == 'Measured current phrase'
+    assert panel.link.document['source'] == 'full-audio'
+    assert not panel.full_completed
+
+
+@pytest.mark.parametrize('preference,expected', [('auto', 'auto'), ('crisper', 'crisper')])
+def test_full_track_without_catalog_prefers_installed_gpu_unless_cpu_selected(panel, monkeypatch, preference, expected):
+    from singlayer import transcriber_runtime
+
+    called = []
+    def select(value):
+        called.append(value)
+        raise ValueError('Stop before starting a worker')
+    monkeypatch.setattr(transcriber_runtime, 'selected_engine', select)
+    panel.track = TRACK
+    panel.document = None
+    panel.catalog_resolved = True
+    panel.lyric_source = 'auto'
+    panel.engine_preference = preference
+    panel.analyze_full_track('https://soundcloud.com/singer/song')
+    assert called == [expected]

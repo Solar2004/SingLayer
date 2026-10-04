@@ -9,6 +9,8 @@ import re
 import shutil
 import signal
 import tempfile
+import time
+import unicodedata
 import wave
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -22,6 +24,8 @@ from .transcription import transcribe_window
 
 MAX_DURATION = 900
 MAX_BYTES = 100_000_000
+FULL_WINDOW = 24
+FULL_HOP = 16
 SITES = ("youtube.com", "youtu.be", "soundcloud.com", "bandcamp.com", "vimeo.com", "mixcloud.com",
          "dailymotion.com", "audiomack.com")
 
@@ -45,7 +49,7 @@ def recording_matches(info, track):
         raise ValueError("La duración del enlace no coincide con la pista del navegador")
     if track:
         def title(value):
-            return " ".join(re.findall(r"\w+", value.casefold()))
+            return " ".join(re.findall(r"\w+", unicodedata.normalize("NFKC", value).casefold()))
         if SequenceMatcher(None, title(info.get("title", "")), title(track["title"])).ratio() < .8:
             raise ValueError("El título del enlace no coincide con la pista del navegador")
     return duration
@@ -109,14 +113,67 @@ async def run_command(argv, *, timeout, data=None, limit=4_000_000, directory=No
 def window_positions(duration):
     if not 0 < duration <= MAX_DURATION:
         raise ValueError("Duración fuera de límite")
-    starts = list(range(0, max(1, math.ceil(duration - 24) + 1), 16))
-    last = max(0, duration - 24)
+    starts = list(range(0, max(1, math.ceil(duration - FULL_WINDOW) + 1), FULL_HOP))
+    last = max(0, duration - FULL_WINDOW)
     if last > starts[-1]:
         starts.append(last)
     return starts
 
 
-def compile_document(raw, catalog=None, route="alignment"):
+
+def next_window(remaining, position):
+    """Cover the audible moment first, then fill the rest of the exact recording."""
+    covering = [start for start in remaining if start <= position < start + FULL_WINDOW]
+    if covering:
+        return max(covering)
+    upcoming = [start for start in remaining if start > position]
+    return min(upcoming) if upcoming else min(remaining)
+
+
+async def current_playhead(track, fallback, duration):
+    if not track.get('id'):
+        return fallback
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1)) as session:
+            async with session.get('http://127.0.0.1:8975/status', allow_redirects=False) as response:
+                response.raise_for_status()
+                value = json.loads(await response.content.read(262144))
+                current = value.get('track') or {}
+                position = current.get('position')
+                if (value.get('service') == 'singlayer' and current.get('id') == track['id']
+                        and not current.get('stale') and isinstance(position, (int, float))
+                        and math.isfinite(position)):
+                    return min(duration, max(0, position)), bool(current.get("playing"))
+    except (aiohttp.ClientError, TimeoutError, ValueError, TypeError):
+        pass
+    return fallback
+
+
+def prepare_result(result, data):
+    raw = result.get("raw_document", result.get("document"))
+    return {**result, "document": compile_document(raw, data.get("catalog"), data.get("route")),
+            "raw_document": compile_document(raw, route="transcript")}
+
+
+def cached_result(directory, data):
+    """An exact recording/model hit needs neither extraction nor source audio."""
+    signature = data.get("engine_signature", "")
+    for path in sorted(directory.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)[:16]:
+        if path.stat().st_size > 4_000_000 or time.time() - path.stat().st_mtime > 86400:
+            continue
+        try:
+            result = json.loads(path.read_text())
+            if (result.get('url') != data['url'] or result.get('engine') != data['engine']
+                    or result.get('engine_signature', '') != signature):
+                continue
+            recording_matches(result, data.get('track'))
+            return prepare_result(result, data)
+        except (ValueError, KeyError, TypeError, OSError):
+            continue
+    return None
+
+
+def compile_document(raw, catalog=None, route="alignment", *, complete=True):
     if not raw:
         return None
     result = json.loads(json.dumps(raw))
@@ -129,14 +186,21 @@ def compile_document(raw, catalog=None, route="alignment"):
                 line["words"] = []
             line["text"] = text
             matched += 1
-    result.update(source="full-audio", sourceName="Pista completa · tiempos acústicos estimados",
+    result.update(source="full-audio", sourceName=("Pista completa" if complete else "Análisis progresivo") + " · tiempos acústicos estimados",
                   timing="Word" if any(line.get("words") for line in result["lines"]) else "Line",
                   catalog_matches=matched)
     return result
 
 
 async def analyze(data, emit):
+    started = time.monotonic()
     url = valid_url(data["url"])
+    cache_dir = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "singlayer/full-track"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    hit = cached_result(cache_dir, {**data, 'url': url})
+    if hit is not None:
+        emit({'full_result': hit, 'cached': True})
+        return
     import sys
 
     local = Path(sys.executable).parent / "yt-dlp"
@@ -150,34 +214,15 @@ async def analyze(data, emit):
     emit({"full_progress": "Comprobando el enlace exacto", "percent": 0})
     info = json.loads(await run_command(base + ["--dump-single-json", "--skip-download", url], timeout=90))
     duration = recording_matches(info, data.get("track"))
-    cache_dir = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "singlayer/full-track"
-    cache_dir.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha256(json.dumps([url, info.get("id"), duration, data.get("engine"),
-                                    data.get("route"), data.get("catalog"), 1], sort_keys=True).encode()).hexdigest()
+                                    data.get("engine_signature", ""), 2], sort_keys=True).encode()).hexdigest()
     cached = cache_dir / (key + '.json')
-    if cached.is_file() and cached.stat().st_size < 4_000_000:
-        result = json.loads(cached.read_text())
-        emit({"full_result": result, "cached": True})
-        return
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
-        for _ in range(240):
-            try:
-                async with session.get('http://127.0.0.1:28748/health') as response:
-                    health = await response.json()
-                    if (response.status == 200 and health.get('service') == 'singlayer-transcription'
-                            and health.get('ready') and not health.get('busy')):
-                        if health.get('backend') != data['engine']:
-                            raise ValueError("El motor activo no coincide con el solicitado")
-                        break
-            except (aiohttp.ClientError, TimeoutError):
-                pass
-            await asyncio.sleep(.5)
-        else:
-            raise RuntimeError("El motor local no está listo")
     with tempfile.TemporaryDirectory(prefix="audio-", dir=cache_dir) as directory:
         emit({"full_progress": "Descargando el audio completo", "percent": 2})
-        await run_command(base + ["--max-filesize", str(MAX_BYTES), "-f", "bestaudio/best",
-                                  "-o", str(Path(directory)/'track.%(ext)s'), url], timeout=300, directory=directory)
+        metadata = Path(directory)/"source.json"
+        metadata.write_text(json.dumps(info))
+        await run_command(base + ["--load-info-json", str(metadata), "--max-filesize", str(MAX_BYTES), "-f", "bestaudio/best",
+                                  "-o", str(Path(directory)/'track.%(ext)s')], timeout=300, directory=directory)
         files = [p for p in Path(directory).glob('track.*') if p.suffix not in ('.part', '.ytdl')]
         if len(files) != 1:
             raise ValueError("No se obtuvo una pista de audio individual completa")
@@ -186,23 +231,58 @@ async def analyze(data, emit):
         measured = len(pcm)/32000
         if abs(measured-duration) > max(2, duration*.02):
             raise ValueError("La descarga está incompleta o su duración no coincide")
+        emit({'full_progress': 'Preparando el motor local', 'percent': 5})
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+            for _ in range(240):
+                try:
+                    async with session.get('http://127.0.0.1:28748/health') as response:
+                        health = await response.json()
+                        if (response.status == 200 and health.get('service') == 'singlayer-transcription'
+                                and health.get('ready') and not health.get('busy')):
+                            if health.get('backend') != data['engine']:
+                                raise ValueError("El motor activo no coincide con el solicitado")
+                            break
+                except (aiohttp.ClientError, TimeoutError):
+                    pass
+                await asyncio.sleep(.5)
+            else:
+                raise RuntimeError("El motor local no está listo")
         raw = None
         starts = window_positions(measured)
-        for index, start in enumerate(starts):
-            emit({"full_progress": f"Analizando audio · {index+1}/{len(starts)} fragmentos", "percent": 5+int(90*index/len(starts))})
-            chunk = pcm[int(start*32000):int((start+24)*32000)]
+        remaining = starts.copy()
+        clock_track = data.get('track') or {}
+        position = max(0, clock_track.get('position', 0))
+        playing = clock_track.get('playing', False)
+        windows_done = 0
+        recent_latency = 12
+        while remaining:
+            # Keep up with playback as extraction and inference consume wall time.
+            playhead = min(measured, position + (time.monotonic()-started if playing else 0))
+            playhead, currently_playing = await current_playhead(clock_track, (playhead, playing), measured)
+            lead = min(12, recent_latency * .75) if currently_playing else 0
+            start = next_window(remaining, min(measured, playhead + lead))
+            remaining.remove(start)
+            emit({"full_progress": f"Analizando audio · {windows_done+1}/{len(starts)} fragmentos", "percent": 5+int(90*windows_done/len(starts))})
+            chunk = pcm[int(start*32000):int((start+FULL_WINDOW)*32000)]
             buf = io.BytesIO()
             with wave.open(buf,'wb') as wav:
                 wav.setnchannels(1)
                 wav.setsampwidth(2)
                 wav.setframerate(16000)
                 wav.writeframes(chunk)
+            inference_started = time.monotonic()
             doc = await transcribe_window(buf.getvalue(), start)
+            recent_latency = time.monotonic() - inference_started
             raw = merge_transcript(raw, doc)
+            windows_done += 1
+            if doc:
+                partial = {'document': compile_document(raw, data.get('catalog'), data.get('route'), complete=False),
+                           'raw_document': compile_document(raw, route='transcript', complete=False), 'duration': measured}
+                emit({'full_partial': partial, 'completed': windows_done, 'total': len(starts)})
         result = {'document': compile_document(raw, data.get('catalog'), data.get('route')),
                   'raw_document': compile_document(raw, route='transcript'),
                   'duration': measured, 'title': info.get('title'), 'url': url,
-                  'engine': data['engine'], 'windows': len(starts)}
+                  'engine': data['engine'], 'engine_signature': data.get('engine_signature', ''), 'windows': len(starts)}
         temporary = cached.with_suffix('.part')
         temporary.write_text(json.dumps(result, ensure_ascii=False))
         temporary.replace(cached)

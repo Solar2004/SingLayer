@@ -860,7 +860,7 @@ class Dashboard(QWidget):
                             bool(self.document) if self.catalog_resolved else None)
 
     def display_document(self):
-        if self.full_completed and self.lyric_source != "catalog":
+        if (self.full_completed or self.full_document) and self.lyric_source != "catalog":
             return self.full_original_document if self.lyric_policy()["route"] == "transcript" else self.full_document
         if self.lyric_policy()["route"] == "transcript":
             return self.observed_document
@@ -881,7 +881,7 @@ class Dashboard(QWidget):
     def publish(self, *_):
         adjustment = self.offset.value(), self.speed.value()
         source_document = self.display_document()
-        if self.full_completed and self.lyric_source != "catalog":
+        if (self.full_completed or self.full_document) and self.lyric_source != "catalog":
             adjustment = (0, 1)
         elif self.lyric_policy()["route"] == "alignment" and self.automatic_clock and self.document:
             source_document = {**self.document, "source": "audio-clock",
@@ -904,7 +904,7 @@ class Dashboard(QWidget):
         # A catalog remains available in the list, but automatic playback must
         # not present an unverified catalog as words actually heard in the audio.
         playback_document = self._adjusted_document
-        if not self.full_completed and self.lyric_policy()["route"] == "alignment" and not self.automatic_clock:
+        if not (self.full_completed or self.full_document) and self.lyric_policy()["route"] == "alignment" and not self.automatic_clock:
             if source_document is not self.live_document or not self.live_document:
                 playback_document = None
             elif self.live_document.get("source") != "audio-aligned":
@@ -1460,6 +1460,8 @@ class Dashboard(QWidget):
     def cancel_full_track(self):
         process, self.full_job = self.full_job, None
         if process:
+            if not self.full_completed:
+                self.full_document = self.full_original_document = None
             self.retiring_jobs.add(process)
             process.terminate()
             QTimer.singleShot(3800, lambda: process.kill() if process in self.retiring_jobs else None)
@@ -1473,6 +1475,9 @@ class Dashboard(QWidget):
         try:
             url = valid_url(url)
             preference = self.lyric_policy()["engine"]
+            if self.engine_preference == "auto" and preference == "crisper":
+                # Whole-track audio can use the installed GPU even without a catalog.
+                preference = "auto"
             engine = selected_engine(preference)
             if engine.get("ready") is False:
                 raise ValueError("Instala el motor antes de analizar la pista")
@@ -1515,8 +1520,19 @@ class Dashboard(QWidget):
                         self.activity.setText(event["full_progress"])
                         self.progress.setRange(0, 100)
                         self.progress.setTextVisible(True)
-                        self.progress.setFormat("Pista completa · %p%")
+                        self.progress.setFormat("Letras disponibles · %p%" if self.full_document else "Pista completa · %p%")
                         self.progress.setValue(event["percent"])
+                    elif "full_partial" in event:
+                        result = event["full_partial"]
+                        self.full_document = result["document"]
+                        self.full_original_document = result["raw_document"]
+                        self.observed_document = result["raw_document"]
+                        self.live_document = result["document"]
+                        self.progress.setRange(0, event["total"])
+                        self.progress.setValue(event["completed"])
+                        self.progress.setFormat("Letras disponibles · %v/%m fragmentos")
+                        self.reading_changed()
+                        self.activity.setText("Primeras letras disponibles · preparando el resto")
                     elif "full_result" in event:
                         result = event["full_result"]
                         self.full_document = result["document"]
@@ -1535,6 +1551,7 @@ class Dashboard(QWidget):
             if self.full_job is process:
                 self.full_job = None
                 if not self.full_completed:
+                    self.full_document = self.full_original_document = None
                     self.start_live()
             self.retiring_jobs.discard(process)
             process.deleteLater()
@@ -1546,6 +1563,7 @@ class Dashboard(QWidget):
                 finished()
         process.errorOccurred.connect(failed)
         payload = json.dumps({"url": url, "track": dict(self.track), "engine": engine["backend"],
+                              "engine_signature": engine.get("sha256", engine.get("model_revision", engine.get("model", ""))),
                               "route": self.lyric_policy()["route"], "catalog": self.document}).encode()
         process.started.connect(lambda: (process.write(payload), process.closeWriteChannel()))
         self.progress.setRange(0, 100)

@@ -8,6 +8,10 @@ Se utiliza el motor seleccionado: Whisper.cpp Vulkan o CrisperWhisper CPU. En au
 
 El audio temporal se elimina al terminar o cancelar. Se guardan hasta 16 resultados de transcripción y tiempos en `~/.cache/singlayer/full-track` (o bajo `XDG_CACHE_HOME`); borra esa carpeta para eliminarlos. Cambiar de pista cancela el trabajo pendiente. El botón **Cancelar análisis completo** detiene el proceso de descarga/análisis.
 
+## Entrega progresiva
+
+Las primeras letras aparecen por fragmentos mientras se prepara el resto, con prioridad al segundo actual. Repetir una versión ya analizada consulta caché local antes de la web; hasta16 resultados por24horas/modelo. [Mediciones y límites de velocidad](PROGRESSIVE_TIMING.md).
+
 ## Límites
 
 - Enlaces HTTPS públicos de YouTube, SoundCloud, Bandcamp, Vimeo, Mixcloud, Dailymotion y Audiomack; pista individual, hasta 15 minutos y 100 MB. No se ha probado cada servicio.

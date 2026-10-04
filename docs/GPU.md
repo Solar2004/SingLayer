@@ -60,3 +60,19 @@ network/device access was requested and not granted. Thus no fresh AMD benchmark
 or C++ build is possible here. An earlier unrestricted session proved Vulkan on
 RX590 GME for ordinary whisper.cpp base (see WHISPER.md); that does not establish
 CrisperWhisper compatibility. No drivers or device permissions were changed.
+
+## Continuation verification — 2026-10-04
+
+Network access was granted in the continuation. GitHub fetch and push succeeded;
+remote main was verified at d7ccb42c0cbb42c21cd11802b37f9fec3e394025.
+The prepared build was attempted, but cloning the community repository failed
+with `Repository not found`; the GitHub repository API also returned HTTP 404.
+Cached search results are not proof that the source is currently downloadable.
+Do not substitute an unverified mirror or claim a successful build.
+
+Read permission for /dev/dri was granted, but the directory is still absent from
+the execution environment. Permission alone does not expose the host GPU.
+Vulkan inference and timing validation still require an environment with the
+actual device and a verifiable source revision. No drivers were changed.
+
+Regression check: 98 passed, 4 IPC-dependent tests deselected.

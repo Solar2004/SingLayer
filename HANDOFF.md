@@ -3,6 +3,21 @@
 Actualizado: 2026-10-04. Este archivo es el punto de entrada canónico y debe leerse
 antes de docs/REQUESTS.md o documentación histórica. No se necesita la conversación.
 
+## Continuación 2026-10-04
+
+- Red concedida: fetch y push completados. main remoto verificado en
+  d7ccb42c0cbb42c21cd11802b37f9fec3e394025 antes de esta actualización.
+- Compilación C++ intentada: clone falló con Repository not found; API GitHub 404.
+  No usar mirrors sin verificar procedencia/revisión.
+- Lectura de /dev/dri concedida, pero el directorio sigue ausente. GPU no probada.
+- Regresión repetida: 98 passed, 4 deselected.
+- Instalación CPU de referencia reintentada, interrumpida durante la descarga
+  lenta de torch; no llegó a convertir pesos ni generar ready.json.
+  Reejecutar bash scripts/setup-crisper.sh para completar ese baseline.
+
+Las secciones históricas inferiores describen los bloqueos de la sesión anterior;
+esta actualización y docs/GPU.md registran lo comprobado en la continuación.
+
 ## 1. Objetivo y decisiones del usuario
 
 App karaoke Linux/KDE (Wayland y X11) mientras escucha SoundCloud en Brave;

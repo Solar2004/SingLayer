@@ -570,3 +570,18 @@ def test_disabled_overlay_does_not_reconnect_existing_instance(panel):
     panel.process_logs(process, "Overlay")
     panel.overlay_finished(0, None)
     assert not panel.link.enabled
+
+
+@pytest.mark.parametrize("isolated", [False, True])
+def test_recognizer_preparation_accepts_isolated_runtime(panel, monkeypatch, tmp_path, isolated):
+    import singlayer.dashboard as dashboard
+
+    monkeypatch.setattr(dashboard, "ROOT", tmp_path)
+    monkeypatch.setattr(dashboard.shutil, "which", lambda _: None)
+    monkeypatch.setattr(dashboard.importlib.util, "find_spec", lambda name: None if name == "shazamio" else object())
+    if isolated:
+        interpreter = tmp_path / ".build/recognizer/bin/python"
+        interpreter.parent.mkdir(parents=True)
+        interpreter.touch()
+    panel.check_engines()
+    assert ("ShazamIO" in panel.missing_engines) is not isolated

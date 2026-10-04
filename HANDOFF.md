@@ -5,7 +5,7 @@ antes de docs/REQUESTS.md o documentación histórica. No se necesita la convers
 
 ## Preparación de versión0.2.0 — última entrega
 
-221 pruebas pasan. Instalador `scripts/install.sh` por HTTPS/curl y etiqueta fija v0.2.0; preflight ejecutables/Python, prefijo absoluto, preservación de directorios/atajos existentes, lanzamiento manual. `--with-whisper` compila y valida GPU; requiere dependencias del sistema. README principal reemplazado para eliminar estados obsoletos. Selector Whisper multilingüe explica detección automática; prueba cirílica valida protocolo/tiempos, no implica benchmark real de canto ruso. CI incluye ahora Qt y fuente Kotonoha para ejecutar tests del panel. Ver [INSTALL.md](docs/INSTALL.md).
+223 pruebas pasan. ShazamIO se prepara solo en entorno Python3.12 separado; desaparece compilación duplicada con Python3.14 y bootstrap acepta el runtime aislado. Instalador `scripts/install.sh` por HTTPS/curl y etiqueta fija v0.2.0; preflight ejecutables/Python, prefijo absoluto, preservación de directorios/atajos existentes, lanzamiento manual. `--with-whisper` compila y valida GPU; requiere dependencias del sistema. README principal reemplazado para eliminar estados obsoletos. Selector Whisper multilingüe explica detección automática; prueba cirílica valida protocolo/tiempos, no implica benchmark real de canto ruso. CI incluye ahora Qt y fuente Kotonoha para ejecutar tests del panel. Ver [INSTALL.md](docs/INSTALL.md).
 
 ## Visor de letras — entrega anterior
 

@@ -1696,10 +1696,14 @@ class Dashboard(QWidget):
     def check_engines(self):
         importlib.invalidate_caches()
         missing = [
-            name for name in ("syncedlyrics", "shazamio", "numpy", "espeakng_loader", "langid", "pykakasi", "yt_dlp") if importlib.util.find_spec(name) is None
+            name for name in ("syncedlyrics", "numpy", "espeakng_loader", "langid", "pykakasi", "yt_dlp") if importlib.util.find_spec(name) is None
         ]
         if sys.version_info >= (3, 13) and importlib.util.find_spec("audioop") is None:
             missing.append("audioop-lts")
+        if (not shutil.which("songrec")
+                and not (ROOT / ".build/recognizer/bin/python").is_file()
+                and importlib.util.find_spec("shazamio") is None):
+            missing.append("ShazamIO")
         self.missing_engines = missing
 
     def install_engines(self):
@@ -1712,19 +1716,10 @@ class Dashboard(QWidget):
         self.cancel_job()
         self.activity.setText("Preparando SingLayer por primera vez…")
         self.progress.setRange(0, 0)
-        self.installer.start(
-            uv,
-            [
-                "pip",
-                "install",
-                "--cache-dir",
-                str(ROOT / ".build" / "uv-cache"),
-                "--python",
-                sys.executable,
-                "-r",
-                str(ROOT / "requirements-engines.txt"),
-            ],
-        )
+        environment = QProcessEnvironment.systemEnvironment()
+        environment.insert("PATH", str(Path(uv).parent) + os.pathsep + os.environ.get("PATH", ""))
+        self.installer.setProcessEnvironment(environment)
+        self.installer.start("bash", [str(ROOT / "scripts/setup-engines.sh")])
 
     def install_finished(self, code, *_):
         self.check_engines()

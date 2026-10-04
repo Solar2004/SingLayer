@@ -1,6 +1,5 @@
 # Direct versions pinned; transitive lock pending online validation.
 syncedlyrics==1.0.1
-shazamio==0.8.1
 numpy>=2,<3
 audioop-lts==0.2.2; python_version >= "3.13"
 espeakng-loader==0.2.4
